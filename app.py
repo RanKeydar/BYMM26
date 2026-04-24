@@ -1,5 +1,10 @@
+import json
+import os
 import pandas as pd
 import streamlit as st
+import urllib.error
+import urllib.request
+import uuid
 
 
 st.set_page_config(page_title="malamala", layout="wide")
@@ -208,6 +213,50 @@ def clear_round_results(round_number: int) -> None:
         st.session_state[f"{current_match_id}_away"] = None
 
 
+def send_ga4_page_view() -> None:
+    api_secret = os.getenv("GA4_API_SECRET")
+    if not api_secret:
+        return
+
+    if "ga4_client_id" not in st.session_state:
+        st.session_state.ga4_client_id = str(uuid.uuid4())
+
+    if st.session_state.get("ga4_page_view_sent", False):
+        return
+
+    payload = {
+        "client_id": st.session_state.ga4_client_id,
+        "events": [
+            {
+                "name": "page_view",
+                "params": {
+                    "page_title": "malamala",
+                    "page_location": "https://malamala-by26.fly.dev",
+                    "session_id": st.session_state.ga4_client_id,
+                    "engagement_time_msec": 1,
+                },
+            }
+        ],
+    }
+
+    endpoint = (
+        "https://www.google-analytics.com/mp/collect"
+        f"?measurement_id={GA_MEASUREMENT_ID}&api_secret={api_secret}"
+    )
+    request = urllib.request.Request(
+        endpoint,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=5):
+            st.session_state.ga4_page_view_sent = True
+    except (urllib.error.URLError, TimeoutError):
+        pass
+
+
 def build_table() -> pd.DataFrame:
     base_table = pd.DataFrame(TEAMS).copy()
     base_table["wins"] = 0
@@ -340,20 +389,7 @@ def fixtures_overview() -> pd.DataFrame:
 
 
 ensure_session_state()
-
-
-st.markdown(
-    f"""
-    <script async src="https://www.googletagmanager.com/gtag/js?id={GA_MEASUREMENT_ID}"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag() {{ dataLayer.push(arguments); }}
-      gtag('js', new Date());
-      gtag('config', '{GA_MEASUREMENT_ID}');
-    </script>
-    """,
-    unsafe_allow_html=True,
-)
+send_ga4_page_view()
 
 
 st.markdown(
