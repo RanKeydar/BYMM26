@@ -4,6 +4,8 @@ import streamlit as st
 
 st.set_page_config(page_title="malamala", layout="wide")
 
+GA_MEASUREMENT_ID = "G-2F4JGD7RLN"
+
 
 TEAMS = [
     {"team": 'מכבי פ"ת', "goals_for": 67, "goals_against": 32, "points": 60},
@@ -341,6 +343,20 @@ ensure_session_state()
 
 
 st.markdown(
+    f"""
+    <script async src="https://www.googletagmanager.com/gtag/js?id={GA_MEASUREMENT_ID}"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {{ dataLayer.push(arguments); }}
+      gtag('js', new Date());
+      gtag('config', '{GA_MEASUREMENT_ID}');
+    </script>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+st.markdown(
     """
     <style>
     html, body, .stApp {
@@ -477,6 +493,24 @@ st.markdown(
         border-radius: 16px;
         padding: 0.75rem 0.9rem;
         margin: 0.6rem 0 0.5rem 0;
+    }
+
+    .site-footer {
+        margin-top: 1.1rem;
+        padding-top: 0.8rem;
+        border-top: 1px solid #dbe5ec;
+        color: #516271;
+        font-size: 0.88rem;
+    }
+
+    .site-footer a {
+        color: #183153;
+        text-decoration: none;
+        font-weight: 600;
+    }
+
+    .site-footer a:hover {
+        text-decoration: underline;
     }
     </style>
     """,
@@ -641,3 +675,12 @@ with last_row_col2:
     else:
         st.error("בני יהודה נשארת בלאומית")
     st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown(
+    """
+    <div class="site-footer">
+        נבנה על ידי <a href="https://www.linkedin.com/in/rankeydar/" target="_blank">רן קידר</a>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
