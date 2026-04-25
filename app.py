@@ -283,6 +283,21 @@ def all_playoff_results_complete() -> bool:
     return True
 
 
+def is_mobile_client() -> bool:
+    """Best-effort layout detection from the current request user agent."""
+    try:
+        headers = getattr(st.context, "headers", None)
+        user_agent = ""
+        if headers is not None:
+            user_agent = headers.get("user-agent", "") or headers.get("User-Agent", "")
+    except Exception:
+        user_agent = ""
+
+    ua = str(user_agent).lower()
+    mobile_tokens = ("mobile", "android", "iphone", "ipad", "ipod")
+    return any(token in ua for token in mobile_tokens)
+
+
 def send_ga4_page_view() -> None:
     api_secret = os.getenv("GA4_API_SECRET")
     if not api_secret:
@@ -1129,6 +1144,7 @@ def fixtures_overview() -> pd.DataFrame:
 
 ensure_session_state()
 send_ga4_page_view()
+mobile_layout = is_mobile_client()
 
 
 st.markdown(
@@ -1454,10 +1470,13 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
 button_col_left, button_col_right = st.columns(2)
-reset_all = button_col_left.button("אפס הכל", use_container_width=True)
-load_random_promotion = button_col_right.button("תרחיש עלייה אקראי", use_container_width=True)
+if mobile_layout:
+    load_random_promotion = button_col_left.button("תרחיש עלייה אקראי", use_container_width=True)
+    reset_all = button_col_right.button("אפס הכל", use_container_width=True)
+else:
+    reset_all = button_col_left.button("אפס הכל", use_container_width=True)
+    load_random_promotion = button_col_right.button("תרחיש עלייה אקראי", use_container_width=True)
 
 if load_random_promotion:
     random_mapping = build_random_promotion_mapping()
@@ -1477,7 +1496,8 @@ for row_start in (1, 4):
     for offset in range(3):
         round_number = row_start + offset
         matches = FIXTURES[round_number]
-        with row_columns[2 - offset]:
+        target_col = row_columns[offset] if mobile_layout else row_columns[2 - offset]
+        with target_col:
             table_slot = st.empty()
             st.markdown("#### משחקים")
 
@@ -1536,9 +1556,12 @@ for row_start in (1, 4):
                 render_table(updated_table, f"מחזור {round_number}", compact=True)
 
 
-last_row_col_left, last_row_col_right = st.columns([2, 1])
+if mobile_layout:
+    last_row_col_round7, last_row_col_final = st.columns([1, 2])
+else:
+    last_row_col_final, last_row_col_round7 = st.columns([2, 1])
 
-with last_row_col_right:
+with last_row_col_round7:
     table_slot = st.empty()
     st.markdown("#### משחקים")
 
@@ -1596,7 +1619,7 @@ with last_row_col_right:
         updated_table = calculate_table_until_round(7)
         render_table(updated_table, "מחזור 7", compact=True)
 
-with last_row_col_left:
+with last_row_col_final:
     final_table = calculate_table_until_round(7)
     bnei_yehuda_row = final_table[final_table["team"] == "בני יהודה"].iloc[0]
     bnei_yehuda_rank = int(bnei_yehuda_row["rank"])
