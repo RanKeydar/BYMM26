@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import time
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
@@ -11,7 +12,7 @@ import uuid
 
 st.set_page_config(page_title="malamala", layout="wide")
 
-GA_MEASUREMENT_ID = "G-2F4JGD7RLN"
+GA_MEASUREMENT_ID = os.getenv("GA4_MEASUREMENT_ID", "G-2F4JGD7RLN")
 COMPLETED_RESULTS_PATH = "completed_results.json"
 
 
@@ -204,6 +205,20 @@ def update_round_results(round_number: int) -> None:
             "home_goals": st.session_state.get(f"{current_match_id}_home"),
             "away_goals": st.session_state.get(f"{current_match_id}_away"),
         }
+    send_ga4_event(
+        "round_updated",
+        {
+            "round_number": round_number,
+            "round_completed_matches": sum(
+                1
+                for match_number, _ in enumerate(FIXTURES[round_number], start=1)
+                if (
+                    st.session_state.results[match_id(round_number, match_number)]["home_goals"] is not None
+                    and st.session_state.results[match_id(round_number, match_number)]["away_goals"] is not None
+                )
+            ),
+        },
+    )
 
 
 def clear_inputs_and_results() -> None:
@@ -218,6 +233,7 @@ def clear_inputs_and_results() -> None:
             else:
                 st.session_state[f"{current_match_id}_home"] = None
                 st.session_state[f"{current_match_id}_away"] = None
+    send_ga4_event("all_results_reset")
 
 
 def clear_round_results(round_number: int) -> None:
@@ -232,6 +248,12 @@ def clear_round_results(round_number: int) -> None:
         st.session_state.results[current_match_id] = {"home_goals": None, "away_goals": None}
         st.session_state[f"{current_match_id}_home"] = None
         st.session_state[f"{current_match_id}_away"] = None
+    send_ga4_event(
+        "round_reset",
+        {
+            "round_number": round_number,
+        },
+    )
 
 
 def current_match_score(current_match_id: str) -> tuple[int | None, int | None]:
@@ -283,6 +305,29 @@ def all_playoff_results_complete() -> bool:
     return True
 
 
+def playoff_points_so_far(team: str) -> int:
+    points = 0
+    for round_number, matches in FIXTURES.items():
+        for match_number, (home_team, away_team) in enumerate(matches, start=1):
+            if team not in (home_team, away_team):
+                continue
+
+            current_match_id = match_id(round_number, match_number)
+            result = st.session_state.results[current_match_id]
+            home_goals = result["home_goals"]
+            away_goals = result["away_goals"]
+
+            if home_goals is None or away_goals is None:
+                continue
+
+            if home_goals == away_goals:
+                points += 1
+            elif (team == home_team and home_goals > away_goals) or (team == away_team and away_goals > home_goals):
+                points += 3
+
+    return points
+
+
 def is_mobile_client() -> bool:
     """Best-effort layout detection from the current request user agent."""
     try:
@@ -298,28 +343,71 @@ def is_mobile_client() -> bool:
     return any(token in ua for token in mobile_tokens)
 
 
-def send_ga4_page_view() -> None:
+def completed_match_count() -> int:
+    return sum(
+        1
+        for score in st.session_state.results.values()
+        if score["home_goals"] is not None and score["away_goals"] is not None
+    )
+
+
+def open_match_count() -> int:
+    return len(st.session_state.results) - completed_match_count()
+
+
+def current_page_location() -> str:
+    try:
+        headers = getattr(st.context, "headers", None)
+        if headers is None:
+            return "https://malamala-by26.fly.dev"
+
+        host = headers.get("host", "") or headers.get("Host", "")
+        forwarded_proto = headers.get("x-forwarded-proto", "") or headers.get("X-Forwarded-Proto", "")
+        if host:
+            scheme = forwarded_proto or ("http" if "localhost" in host or "127.0.0.1" in host else "https")
+            return f"{scheme}://{host}"
+    except Exception:
+        pass
+    return "https://malamala-by26.fly.dev"
+
+
+def ensure_ga4_identity() -> None:
+    if "ga4_client_id" not in st.session_state:
+        st.session_state.ga4_client_id = str(uuid.uuid4())
+    if "ga4_session_id" not in st.session_state:
+        st.session_state.ga4_session_id = int(time.time())
+
+
+def send_ga4_event(name: str, params: dict[str, object] | None = None, once_key: str | None = None) -> None:
     api_secret = os.getenv("GA4_API_SECRET")
     if not api_secret:
         return
 
-    if "ga4_client_id" not in st.session_state:
-        st.session_state.ga4_client_id = str(uuid.uuid4())
-
-    if st.session_state.get("ga4_page_view_sent", False):
+    if once_key is not None and st.session_state.get(once_key, False):
         return
+
+    ensure_ga4_identity()
+    event_params: dict[str, object] = {
+        "session_id": st.session_state.ga4_session_id,
+        "engagement_time_msec": 1,
+        "layout_mode": st.session_state.get("layout_mode", "unknown"),
+        "completed_match_count": completed_match_count(),
+        "open_match_count": open_match_count(),
+    }
+    if params:
+        event_params.update(params)
+    if os.getenv("GA4_DEBUG_MODE") == "1":
+        event_params["debug_mode"] = 1
 
     payload = {
         "client_id": st.session_state.ga4_client_id,
+        "user_properties": {
+            "layout_mode": {"value": str(st.session_state.get("layout_mode", "unknown"))},
+        },
         "events": [
             {
-                "name": "page_view",
-                "params": {
-                    "page_title": "malamala",
-                    "page_location": "https://malamala-by26.fly.dev",
-                    "session_id": st.session_state.ga4_client_id,
-                    "engagement_time_msec": 1,
-                },
+                "name": name,
+                "params": event_params,
             }
         ],
     }
@@ -337,9 +425,21 @@ def send_ga4_page_view() -> None:
 
     try:
         with urllib.request.urlopen(request, timeout=5):
-            st.session_state.ga4_page_view_sent = True
+            if once_key is not None:
+                st.session_state[once_key] = True
     except (urllib.error.URLError, TimeoutError):
         pass
+
+
+def send_ga4_page_view() -> None:
+    send_ga4_event(
+        "page_view",
+        {
+            "page_title": "malamala",
+            "page_location": current_page_location(),
+        },
+        once_key="ga4_page_view_sent",
+    )
 
 
 def sample_score_for_outcome(outcome: str) -> tuple[int, int]:
@@ -737,6 +837,7 @@ def enumerate_target_only_scenarios(target_team: str = "בני יהודה") -> l
     target_matches, other_matches = split_pending_matches(target_team)
     other_match_counts = remaining_match_counts(other_matches)
     rival_teams = [team_data["team"] for team_data in TEAMS if team_data["team"] != target_team]
+    current_playoff_points = playoff_points_so_far(target_team)
     scenarios: list[dict[str, object]] = []
 
     def search(
@@ -791,6 +892,7 @@ def enumerate_target_only_scenarios(target_team: str = "בני יהודה") -> l
             scenarios.append(
                 {
                     "points_gained": gained_points,
+                    "playoff_points_total": current_playoff_points + gained_points,
                     "final_points": target_final_points,
                     "scenario_key": "-".join(result_labels) if result_labels else "ללא משחקים פתוחים",
                     "scenario_details": " | ".join(detail_labels) if detail_labels else "אין משחקים פתוחים לבני יהודה",
@@ -954,11 +1056,7 @@ def render_rival_caps_chart(target_team: str, scenario: dict[str, object], gaine
                 "team": team_name,
                 "value": value,
                 "label": str(row["מקסימום נוספות שמותר לקחת"]),
-                "note": (
-                    "כבר מעל בני יהודה"
-                    if row["מעל בני יהודה כבר עכשיו"] == "כן"
-                    else f"מתוך {row['נקודות זמינות בלי בני יהודה']} אפשריות"
-                ),
+                "note": "כבר מעל בני יהודה" if row["מעל בני יהודה כבר עכשיו"] == "כן" else "",
             }
         )
 
@@ -1063,13 +1161,15 @@ def render_promotion_status_table(target_team: str = "בני יהודה") -> Non
         return
 
     scenarios = enumerate_target_only_scenarios(target_team)
-    unique_gains = sorted({int(item["points_gained"]) for item in scenarios})
-    default_gain = unique_gains[-1] if unique_gains else 0
-    raw_gain = st.session_state.get("promotion_gain_selector", default_gain)
-    snapped_gain = raw_gain
-    if unique_gains and raw_gain not in unique_gains:
-        snapped_gain = min(unique_gains, key=lambda value: (abs(value - int(raw_gain)), -value))
-        st.session_state["promotion_gain_selector"] = snapped_gain
+    current_playoff_total = playoff_points_so_far(target_team)
+    remaining_points_available = len(unresolved_match_ids_for_team(target_team)) * 3
+    unique_totals = sorted({int(item["playoff_points_total"]) for item in scenarios})
+    default_total = unique_totals[-1] if unique_totals else current_playoff_total
+    raw_total = st.session_state.get("promotion_gain_selector", default_total)
+    snapped_total = raw_total
+    if unique_totals and raw_total not in unique_totals:
+        snapped_total = min(unique_totals, key=lambda value: (abs(value - int(raw_total)), -value))
+        st.session_state["promotion_gain_selector"] = snapped_total
 
     st.markdown(
         '<div class="promotion-heading">האם בני יהודה תלויה רק בעצמה?</div>',
@@ -1078,21 +1178,21 @@ def render_promotion_status_table(target_team: str = "בני יהודה") -> Non
     st.markdown(
         f"""
         <div class="promotion-text">
-            כרגע נותרו לבני יהודה {len(unresolved_match_ids_for_team(target_team))} משחקים פתוחים, כלומר {len(scenarios):,} תרחישים של בני יהודה בלבד
-            (ההנחה היא שבמצב של שוויון נקודות ליריבה יהיה הפרש שערים טוב יותר ובני יהודה לא תעלה).
-            זהו סליידר שמחשב את מספר הנקודות המירבי שהיריבות יכולות לקחת כדי שבני יהודה תעלה עם מספר הנקודות שנבחר.
+            כרגע נותרו לבני יהודה {len(unresolved_match_ids_for_team(target_team))} משחקים פתוחים, והיא לקחה {current_playoff_total} נקודות עד כה בפלייאוף.
+            נותרו עוד {remaining_points_available} נקודות בקופה. ההנחה היא שבמצב של שוויון נקודות ליריבה יהיה הפרש שערים טוב יותר ובני יהודה לא תעלה.
+            זהו סליידר שמחשב את מספר הנקודות המירבי שהיריבות יכולות לקחת במשחקים שנותרו כדי שבני יהודה תעלה עם מספר הנקודות שנבחר.
         </div>
         """,
         unsafe_allow_html=True,
     )
 
     slider_label = (
-        f"בדוק מה מספר הנקודות המקסימלי שיכולה כל יריבה לקחת בתרחיש שבו בני יהודה לוקחת {snapped_gain} נקודות"
+        f"בדוק מה מספר הנקודות המקסימלי שיכולה כל יריבה לקחת במשחקי הפלייאוף שנותרו, בתרחיש שבו בני יהודה לוקחת {snapped_total} נקודות"
     )
-    if len(unique_gains) <= 1:
-        effective_gain = unique_gains[0] if unique_gains else 0
+    if len(unique_totals) <= 1:
+        effective_total = unique_totals[0] if unique_totals else current_playoff_total
         st.markdown(
-            f'<div class="promotion-text"><strong>בדוק מה מספר הנקודות המקסימלי שיכולה כל יריבה לקחת בתרחיש שבו בני יהודה לוקחת {effective_gain} נקודות</strong></div>',
+            f'<div class="promotion-text"><strong>בדוק מה מספר הנקודות המקסימלי שיכולה כל יריבה לקחת במשחקי הפלייאוף שנותרו, בתרחיש שבו בני יהודה לוקחת {effective_total} נקודות</strong></div>',
             unsafe_allow_html=True,
         )
     else:
@@ -1100,20 +1200,30 @@ def render_promotion_status_table(target_team: str = "בני יהודה") -> Non
             f'<div class="promotion-slider-label"><strong>{slider_label}</strong></div>',
             unsafe_allow_html=True,
         )
-        selected_gain = st.slider(
+        selected_total = st.slider(
             "בחירת נקודות לבני יהודה",
-            min_value=min(unique_gains),
-            max_value=max(unique_gains),
-            value=snapped_gain,
+            min_value=min(unique_totals),
+            max_value=max(unique_totals),
+            value=snapped_total,
             step=1,
             key="promotion_gain_selector",
             label_visibility="collapsed",
         )
-        effective_gain = selected_gain
-        if selected_gain not in unique_gains:
-            effective_gain = min(unique_gains, key=lambda value: (abs(value - int(selected_gain)), -value))
+        effective_total = selected_total
+        if selected_total not in unique_totals:
+            effective_total = min(unique_totals, key=lambda value: (abs(value - int(selected_total)), -value))
 
-    gain_scenarios = [item for item in scenarios if int(item["points_gained"]) == int(effective_gain)]
+    gain_scenarios = [item for item in scenarios if int(item["playoff_points_total"]) == int(effective_total)]
+    last_sent_gain = st.session_state.get("ga4_last_promotion_gain_sent")
+    if last_sent_gain != int(effective_total):
+        send_ga4_event(
+            "promotion_gain_selected",
+            {
+                "selected_gain": int(effective_total),
+                "scenario_count": len(gain_scenarios),
+            },
+        )
+        st.session_state["ga4_last_promotion_gain_sent"] = int(effective_total)
 
     scenario = max(
         gain_scenarios,
@@ -1124,9 +1234,9 @@ def render_promotion_status_table(target_team: str = "בני יהודה") -> Non
         ),
     )
     st.markdown(
-        f"##### מספר הנקודות המירבי שיכולות לקחת היריבות ועדיין יאפשר לבני יהודה לעלות ליגה, אם תיקח סה\"כ {effective_gain} נקודות במהלך הפלייאוף",
+        f"##### מספר הנקודות המירבי שיכולות לקחת היריבות במשחקים שנותרו, כדי שבני יהודה עדיין תעלה ליגה אם תיקח {effective_total} נקודות במשחקים שנותרו עד סוף העונה",
     )
-    render_rival_caps_chart(target_team, scenario, int(effective_gain))
+    render_rival_caps_chart(target_team, scenario, int(effective_total))
 
 
 def fixtures_overview() -> pd.DataFrame:
@@ -1142,9 +1252,95 @@ def fixtures_overview() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def render_round_section(round_number: int, completed_results: dict[str, dict[str, int | None]]) -> None:
+    matches = FIXTURES[round_number]
+    table_slot = st.empty()
+    st.markdown("#### משחקים")
+
+    for match_number, (home_team, away_team) in enumerate(matches, start=1):
+        current_match_id = match_id(round_number, match_number)
+        home_key = f"{current_match_id}_home"
+        away_key = f"{current_match_id}_away"
+        is_completed = current_match_id in completed_results
+        home_value, away_value = current_match_score(current_match_id)
+
+        row_a, row_b, row_c = st.columns([4.9, 1, 1])
+        with row_a:
+            st.markdown(
+                render_match_label(home_team, away_team, home_value, away_value, is_completed),
+                unsafe_allow_html=True,
+            )
+        with row_b:
+            st.number_input(
+                f"{away_team} שערים",
+                min_value=0,
+                step=1,
+                value=st.session_state.get(away_key),
+                key=away_key,
+                label_visibility="collapsed",
+                placeholder="ח",
+                disabled=is_completed,
+            )
+        with row_c:
+            st.number_input(
+                f"{home_team} שערים",
+                min_value=0,
+                step=1,
+                value=st.session_state.get(home_key),
+                key=home_key,
+                label_visibility="collapsed",
+                placeholder="ב",
+                disabled=is_completed,
+            )
+
+    action_col1, action_col2 = st.columns(2)
+    action_col1.button(
+        f"עדכן מחזור {round_number}",
+        key=f"update_round_{round_number}",
+        use_container_width=True,
+        on_click=update_round_results,
+        args=(round_number,),
+    )
+    action_col2.button(
+        f"איפוס מחזור {round_number}",
+        key=f"clear_round_{round_number}",
+        use_container_width=True,
+        on_click=clear_round_results,
+        args=(round_number,),
+    )
+    with table_slot.container():
+        updated_table = calculate_table_until_round(round_number)
+        render_table(updated_table, f"מחזור {round_number}", compact=True)
+
+
+def render_round_group(
+    round_numbers: list[int],
+    completed_results: dict[str, dict[str, int | None]],
+    mobile_layout: bool,
+) -> None:
+    if mobile_layout:
+        for round_number in round_numbers:
+            render_round_section(round_number, completed_results)
+        return
+
+    display_rounds = list(reversed(round_numbers))
+    row_columns = st.columns(len(display_rounds))
+    for target_col, round_number in zip(row_columns, display_rounds):
+        with target_col:
+            render_round_section(round_number, completed_results)
+
+
 ensure_session_state()
-send_ga4_page_view()
 mobile_layout = is_mobile_client()
+st.session_state.layout_mode = "mobile" if mobile_layout else "desktop"
+send_ga4_page_view()
+send_ga4_event(
+    "app_opened",
+    {
+        "app_version": "playoff_streamlit",
+    },
+    once_key="ga4_app_opened_sent",
+)
 
 
 st.markdown(
@@ -1454,6 +1650,65 @@ st.markdown(
     .site-footer a:hover {
         text-decoration: underline;
     }
+
+    @media (max-width: 900px) {
+        .stApp {
+            max-width: 100%;
+        }
+
+        .block-container {
+            padding-top: 0.8rem;
+            padding-left: 0.7rem;
+            padding-right: 0.7rem;
+            padding-bottom: 1.3rem;
+        }
+
+        .hero-box {
+            padding: 0.85rem 0.9rem;
+            border-radius: 16px;
+        }
+
+        .hero-box h1 {
+            font-size: 1.45rem;
+            line-height: 1.15;
+        }
+
+        .hero-box p {
+            font-size: 0.84rem;
+        }
+
+        .compact-match-label {
+            font-size: 0.74rem;
+            gap: 0.22rem;
+        }
+
+        .match-score-chip {
+            min-width: 2rem;
+        }
+
+        th, td {
+            font-size: 0.72rem !important;
+            padding: 0.24rem 0.28rem !important;
+        }
+
+        .promotion-heading {
+            font-size: 1.3rem;
+        }
+
+        .promotion-text,
+        .promotion-slider-label,
+        .site-footer {
+            font-size: 0.84rem;
+        }
+
+        .rival-chart-head {
+            font-size: 0.84rem;
+        }
+
+        .rival-chart-note {
+            font-size: 0.7rem;
+        }
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -1481,9 +1736,16 @@ else:
 if load_random_promotion:
     random_mapping = build_random_promotion_mapping()
     if random_mapping is None:
+        send_ga4_event("random_promotion_failed")
         st.warning("לא נמצא תרחיש אקראי שבו בני יהודה עולה ליגה.")
     else:
         set_results_from_mapping(random_mapping)
+        send_ga4_event(
+            "random_promotion_loaded",
+            {
+                "randomized_match_count": len(random_mapping),
+            },
+        )
 
 if reset_all:
     clear_inputs_and_results()
@@ -1491,135 +1753,12 @@ if reset_all:
 
 completed_results = load_completed_results()
 
-for row_start in (1, 4):
-    row_columns = st.columns(3)
-    for offset in range(3):
-        round_number = row_start + offset
-        matches = FIXTURES[round_number]
-        target_col = row_columns[offset] if mobile_layout else row_columns[2 - offset]
-        with target_col:
-            table_slot = st.empty()
-            st.markdown("#### משחקים")
-
-            for match_number, (home_team, away_team) in enumerate(matches, start=1):
-                current_match_id = match_id(round_number, match_number)
-                home_key = f"{current_match_id}_home"
-                away_key = f"{current_match_id}_away"
-                is_completed = current_match_id in completed_results
-                home_value, away_value = current_match_score(current_match_id)
-
-                row_a, row_b, row_c = st.columns([4.9, 1, 1])
-                with row_a:
-                    st.markdown(
-                        render_match_label(home_team, away_team, home_value, away_value, is_completed),
-                        unsafe_allow_html=True,
-                    )
-                with row_b:
-                    st.number_input(
-                        f"{away_team} שערים",
-                        min_value=0,
-                        step=1,
-                        value=st.session_state.get(away_key),
-                        key=away_key,
-                        label_visibility="collapsed",
-                        placeholder="ח",
-                        disabled=is_completed,
-                    )
-                with row_c:
-                    st.number_input(
-                        f"{home_team} שערים",
-                        min_value=0,
-                        step=1,
-                        value=st.session_state.get(home_key),
-                        key=home_key,
-                        label_visibility="collapsed",
-                        placeholder="ב",
-                        disabled=is_completed,
-                    )
-            action_col1, action_col2 = st.columns(2)
-            action_col1.button(
-                f"עדכן מחזור {round_number}",
-                key=f"update_round_{round_number}",
-                use_container_width=True,
-                on_click=update_round_results,
-                args=(round_number,),
-            )
-            action_col2.button(
-                f"איפוס מחזור {round_number}",
-                key=f"clear_round_{round_number}",
-                use_container_width=True,
-                on_click=clear_round_results,
-                args=(round_number,),
-            )
-            with table_slot.container():
-                updated_table = calculate_table_until_round(round_number)
-                render_table(updated_table, f"מחזור {round_number}", compact=True)
+for round_group in ([1, 2, 3], [4, 5, 6]):
+    render_round_group(round_group, completed_results, mobile_layout)
 
 
 if mobile_layout:
-    last_row_col_round7, last_row_col_final = st.columns([1, 2])
-else:
-    last_row_col_final, last_row_col_round7 = st.columns([2, 1])
-
-with last_row_col_round7:
-    table_slot = st.empty()
-    st.markdown("#### משחקים")
-
-    for match_number, (home_team, away_team) in enumerate(FIXTURES[7], start=1):
-        current_match_id = match_id(7, match_number)
-        home_key = f"{current_match_id}_home"
-        away_key = f"{current_match_id}_away"
-        is_completed = current_match_id in completed_results
-        home_value, away_value = current_match_score(current_match_id)
-
-        row_a, row_b, row_c = st.columns([4.9, 1, 1])
-        with row_a:
-            st.markdown(
-                render_match_label(home_team, away_team, home_value, away_value, is_completed),
-                unsafe_allow_html=True,
-            )
-        with row_b:
-            st.number_input(
-                f"{away_team} שערים",
-                min_value=0,
-                step=1,
-                value=st.session_state.get(away_key),
-                key=away_key,
-                label_visibility="collapsed",
-                placeholder="ח",
-                disabled=is_completed,
-            )
-        with row_c:
-            st.number_input(
-                f"{home_team} שערים",
-                min_value=0,
-                step=1,
-                value=st.session_state.get(home_key),
-                key=home_key,
-                label_visibility="collapsed",
-                placeholder="ב",
-                disabled=is_completed,
-            )
-    action_col1, action_col2 = st.columns(2)
-    action_col1.button(
-        "עדכן מחזור 7",
-        key="update_round_7",
-        use_container_width=True,
-        on_click=update_round_results,
-        args=(7,),
-    )
-    action_col2.button(
-        "איפוס מחזור 7",
-        key="clear_round_7",
-        use_container_width=True,
-        on_click=clear_round_results,
-        args=(7,),
-    )
-    with table_slot.container():
-        updated_table = calculate_table_until_round(7)
-        render_table(updated_table, "מחזור 7", compact=True)
-
-with last_row_col_final:
+    render_round_section(7, completed_results)
     final_table = calculate_table_until_round(7)
     bnei_yehuda_row = final_table[final_table["team"] == "בני יהודה"].iloc[0]
     bnei_yehuda_rank = int(bnei_yehuda_row["rank"])
@@ -1628,6 +1767,30 @@ with last_row_col_final:
         st.success("בני יהודה עולה לליגת העל")
     else:
         st.error("בני יהודה נשארת בלאומית")
+else:
+    last_row_col_final, last_row_col_round7 = st.columns([2, 1])
+
+    with last_row_col_round7:
+        render_round_section(7, completed_results)
+
+    with last_row_col_final:
+        final_table = calculate_table_until_round(7)
+        bnei_yehuda_row = final_table[final_table["team"] == "בני יהודה"].iloc[0]
+        bnei_yehuda_rank = int(bnei_yehuda_row["rank"])
+        render_table(final_table, "טבלת סיום עונה", compact=True)
+        if bnei_yehuda_rank <= 2:
+            st.success("בני יהודה עולה לליגת העל")
+        else:
+            st.error("בני יהודה נשארת בלאומית")
+
+if all_playoff_results_complete():
+    send_ga4_event(
+        "all_results_completed",
+        {
+            "bnei_yehuda_rank": bnei_yehuda_rank,
+        },
+        once_key="ga4_all_results_completed_sent",
+    )
 
 st.markdown("---")
 render_promotion_status_table("בני יהודה")
