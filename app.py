@@ -10,7 +10,7 @@ import urllib.request
 import uuid
 
 
-st.set_page_config(page_title="malamala", layout="wide")
+st.set_page_config(page_title="מעלה מעלה", layout="wide")
 
 GA_MEASUREMENT_ID = os.getenv("GA4_MEASUREMENT_ID", "G-2F4JGD7RLN")
 COMPLETED_RESULTS_PATH = "completed_results.json"
@@ -163,10 +163,30 @@ def ensure_session_state() -> None:
             current_match_id = match_id(round_number, match_number)
             home_key = f"{current_match_id}_home"
             away_key = f"{current_match_id}_away"
+            home_touched_key = f"{current_match_id}_home_touched"
+            away_touched_key = f"{current_match_id}_away_touched"
             if home_key not in st.session_state:
-                st.session_state[home_key] = st.session_state.results[current_match_id]["home_goals"]
+                home_goals = st.session_state.results[current_match_id]["home_goals"]
+                st.session_state[home_key] = 0 if home_goals is None else home_goals
             if away_key not in st.session_state:
-                st.session_state[away_key] = st.session_state.results[current_match_id]["away_goals"]
+                away_goals = st.session_state.results[current_match_id]["away_goals"]
+                st.session_state[away_key] = 0 if away_goals is None else away_goals
+            if home_touched_key not in st.session_state:
+                st.session_state[home_touched_key] = st.session_state.results[current_match_id]["home_goals"] is not None
+            if away_touched_key not in st.session_state:
+                st.session_state[away_touched_key] = st.session_state.results[current_match_id]["away_goals"] is not None
+
+
+def mark_score_touched(current_match_id: str, side: str) -> None:
+    st.session_state[f"{current_match_id}_{side}_touched"] = True
+
+
+def adjust_score(current_match_id: str, side: str, delta: int) -> None:
+    score_key = f"{current_match_id}_{side}"
+    touched_key = f"{current_match_id}_{side}_touched"
+    current_value = int(st.session_state.get(score_key, 0))
+    st.session_state[score_key] = max(0, current_value + delta)
+    st.session_state[touched_key] = True
 
 
 def set_results_from_mapping(mapping: dict[str, tuple[int, int]]) -> None:
@@ -177,19 +197,27 @@ def set_results_from_mapping(mapping: dict[str, tuple[int, int]]) -> None:
             current_match_id = match_id(round_number, match_number)
             home_key = f"{current_match_id}_home"
             away_key = f"{current_match_id}_away"
+            home_touched_key = f"{current_match_id}_home_touched"
+            away_touched_key = f"{current_match_id}_away_touched"
             score = mapping.get(current_match_id)
             completed_score = load_completed_results().get(current_match_id)
 
             if completed_score is not None:
                 st.session_state[home_key] = completed_score["home_goals"]
                 st.session_state[away_key] = completed_score["away_goals"]
+                st.session_state[home_touched_key] = True
+                st.session_state[away_touched_key] = True
                 st.session_state.results[current_match_id] = completed_score
             elif score is None:
-                st.session_state[home_key] = None
-                st.session_state[away_key] = None
+                st.session_state[home_key] = 0
+                st.session_state[away_key] = 0
+                st.session_state[home_touched_key] = False
+                st.session_state[away_touched_key] = False
             else:
                 st.session_state[home_key] = score[0]
                 st.session_state[away_key] = score[1]
+                st.session_state[home_touched_key] = True
+                st.session_state[away_touched_key] = True
                 st.session_state.results[current_match_id] = {
                     "home_goals": score[0],
                     "away_goals": score[1],
@@ -201,10 +229,20 @@ def update_round_results(round_number: int) -> None:
         current_match_id = match_id(round_number, match_number)
         if current_match_id in load_completed_results():
             continue
+        home_touched = st.session_state.get(f"{current_match_id}_home_touched", False)
+        away_touched = st.session_state.get(f"{current_match_id}_away_touched", False)
+        if not home_touched and not away_touched:
+            st.session_state.results[current_match_id] = {"home_goals": None, "away_goals": None}
+            continue
+
+        home_goals = int(st.session_state.get(f"{current_match_id}_home", 0))
+        away_goals = int(st.session_state.get(f"{current_match_id}_away", 0))
         st.session_state.results[current_match_id] = {
-            "home_goals": st.session_state.get(f"{current_match_id}_home"),
-            "away_goals": st.session_state.get(f"{current_match_id}_away"),
+            "home_goals": home_goals,
+            "away_goals": away_goals,
         }
+        st.session_state[f"{current_match_id}_home_touched"] = True
+        st.session_state[f"{current_match_id}_away_touched"] = True
     send_ga4_event(
         "round_updated",
         {
@@ -230,9 +268,13 @@ def clear_inputs_and_results() -> None:
             if completed_score is not None:
                 st.session_state[f"{current_match_id}_home"] = completed_score["home_goals"]
                 st.session_state[f"{current_match_id}_away"] = completed_score["away_goals"]
+                st.session_state[f"{current_match_id}_home_touched"] = True
+                st.session_state[f"{current_match_id}_away_touched"] = True
             else:
-                st.session_state[f"{current_match_id}_home"] = None
-                st.session_state[f"{current_match_id}_away"] = None
+                st.session_state[f"{current_match_id}_home"] = 0
+                st.session_state[f"{current_match_id}_away"] = 0
+                st.session_state[f"{current_match_id}_home_touched"] = False
+                st.session_state[f"{current_match_id}_away_touched"] = False
     send_ga4_event("all_results_reset")
 
 
@@ -244,10 +286,14 @@ def clear_round_results(round_number: int) -> None:
             st.session_state.results[current_match_id] = completed_score
             st.session_state[f"{current_match_id}_home"] = completed_score["home_goals"]
             st.session_state[f"{current_match_id}_away"] = completed_score["away_goals"]
+            st.session_state[f"{current_match_id}_home_touched"] = True
+            st.session_state[f"{current_match_id}_away_touched"] = True
             continue
         st.session_state.results[current_match_id] = {"home_goals": None, "away_goals": None}
-        st.session_state[f"{current_match_id}_home"] = None
-        st.session_state[f"{current_match_id}_away"] = None
+        st.session_state[f"{current_match_id}_home"] = 0
+        st.session_state[f"{current_match_id}_away"] = 0
+        st.session_state[f"{current_match_id}_home_touched"] = False
+        st.session_state[f"{current_match_id}_away_touched"] = False
     send_ga4_event(
         "round_reset",
         {
@@ -257,8 +303,13 @@ def clear_round_results(round_number: int) -> None:
 
 
 def current_match_score(current_match_id: str) -> tuple[int | None, int | None]:
-    home_value = st.session_state.get(f"{current_match_id}_home")
-    away_value = st.session_state.get(f"{current_match_id}_away")
+    home_touched = st.session_state.get(f"{current_match_id}_home_touched", False)
+    away_touched = st.session_state.get(f"{current_match_id}_away_touched", False)
+    if not home_touched and not away_touched:
+        return 0, 0
+
+    home_value = st.session_state.get(f"{current_match_id}_home", 0)
+    away_value = st.session_state.get(f"{current_match_id}_away", 0)
     return home_value, away_value
 
 
@@ -435,7 +486,7 @@ def send_ga4_page_view() -> None:
     send_ga4_event(
         "page_view",
         {
-            "page_title": "malamala",
+            "page_title": "מעלה מעלה",
             "page_location": current_page_location(),
         },
         once_key="ga4_page_view_sent",
@@ -1200,18 +1251,14 @@ def render_promotion_status_table(target_team: str = "בני יהודה") -> Non
             f'<div class="promotion-slider-label"><strong>{slider_label}</strong></div>',
             unsafe_allow_html=True,
         )
-        selected_total = st.slider(
+        selected_total = st.select_slider(
             "בחירת נקודות לבני יהודה",
-            min_value=min(unique_totals),
-            max_value=max(unique_totals),
+            options=unique_totals,
             value=snapped_total,
-            step=1,
             key="promotion_gain_selector",
             label_visibility="collapsed",
         )
         effective_total = selected_total
-        if selected_total not in unique_totals:
-            effective_total = min(unique_totals, key=lambda value: (abs(value - int(selected_total)), -value))
 
     gain_scenarios = [item for item in scenarios if int(item["playoff_points_total"]) == int(effective_total)]
     last_sent_gain = st.session_state.get("ga4_last_promotion_gain_sent")
@@ -1264,34 +1311,82 @@ def render_round_section(round_number: int, completed_results: dict[str, dict[st
         is_completed = current_match_id in completed_results
         home_value, away_value = current_match_score(current_match_id)
 
-        row_a, row_b, row_c = st.columns([4.9, 1, 1])
-        with row_a:
+        if is_completed:
             st.markdown(
                 render_match_label(home_team, away_team, home_value, away_value, is_completed),
                 unsafe_allow_html=True,
             )
-        with row_b:
-            st.number_input(
-                f"{away_team} שערים",
-                min_value=0,
-                step=1,
-                value=st.session_state.get(away_key),
-                key=away_key,
-                label_visibility="collapsed",
-                placeholder="ח",
-                disabled=is_completed,
-            )
-        with row_c:
-            st.number_input(
-                f"{home_team} שערים",
-                min_value=0,
-                step=1,
-                value=st.session_state.get(home_key),
-                key=home_key,
-                label_visibility="collapsed",
-                placeholder="ב",
-                disabled=is_completed,
-            )
+        else:
+            (
+                away_minus_col,
+                away_input_col,
+                away_plus_col,
+                label_col,
+                home_minus_col,
+                home_input_col,
+                home_plus_col,
+            ) = st.columns([0.34, 0.5, 0.34, 5.3, 0.34, 0.5, 0.34])
+            with away_minus_col:
+                st.button(
+                    "-",
+                    key=f"{current_match_id}_away_minus",
+                    use_container_width=True,
+                    on_click=adjust_score,
+                    args=(current_match_id, "away", -1),
+                )
+            with away_input_col:
+                st.number_input(
+                    f"{away_team} שערים",
+                    min_value=0,
+                    step=1,
+                    value=int(st.session_state.get(away_key, 0)),
+                    key=away_key,
+                    label_visibility="collapsed",
+                    placeholder="ח",
+                    on_change=mark_score_touched,
+                    args=(current_match_id, "away"),
+                )
+            with away_plus_col:
+                st.button(
+                    "+",
+                    key=f"{current_match_id}_away_plus",
+                    use_container_width=True,
+                    on_click=adjust_score,
+                    args=(current_match_id, "away", 1),
+                )
+            with label_col:
+                st.markdown(
+                    render_match_label(home_team, away_team, home_value, away_value, is_completed),
+                    unsafe_allow_html=True,
+                )
+            with home_minus_col:
+                st.button(
+                    "-",
+                    key=f"{current_match_id}_home_minus",
+                    use_container_width=True,
+                    on_click=adjust_score,
+                    args=(current_match_id, "home", -1),
+                )
+            with home_input_col:
+                st.number_input(
+                    f"{home_team} שערים",
+                    min_value=0,
+                    step=1,
+                    value=int(st.session_state.get(home_key, 0)),
+                    key=home_key,
+                    label_visibility="collapsed",
+                    placeholder="ב",
+                    on_change=mark_score_touched,
+                    args=(current_match_id, "home"),
+                )
+            with home_plus_col:
+                st.button(
+                    "+",
+                    key=f"{current_match_id}_home_plus",
+                    use_container_width=True,
+                    on_click=adjust_score,
+                    args=(current_match_id, "home", 1),
+                )
 
     action_col1, action_col2 = st.columns(2)
     action_col1.button(
@@ -1542,15 +1637,28 @@ st.markdown(
         margin-bottom: 0 !important;
     }
 
+    .compact-round-box .stButton button {
+        min-height: 22px;
+        padding: 0;
+        font-size: 0.68rem;
+        border-radius: 8px;
+    }
+
     .compact-round-box [data-testid="stMarkdownContainer"] p {
         margin-bottom: 0;
     }
 
     .compact-round-box [data-testid="stNumberInput"] input {
-        min-height: 32px !important;
-        padding-top: 0.15rem !important;
-        padding-bottom: 0.15rem !important;
-        font-size: 0.8rem !important;
+        min-height: 22px !important;
+        padding-top: 0.02rem !important;
+        padding-bottom: 0.02rem !important;
+        padding-left: 0.12rem !important;
+        padding-right: 0.12rem !important;
+        font-size: 0.68rem !important;
+    }
+
+    .compact-round-box [data-testid="column"] {
+        gap: 0.12rem;
     }
 
     .season-box {
