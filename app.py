@@ -1234,7 +1234,7 @@ def render_promotion_status_table(target_team: str = "בני יהודה") -> Non
         ),
     )
     st.markdown(
-        f"##### מספר הנקודות המירבי שיכולות לקחת היריבות במשחקים שנותרו, כדי שבני יהודה עדיין תעלה ליגה אם תיקח {effective_total} נקודות במשחקים שנותרו עד סוף העונה",
+        f"##### מספר הנקודות המירבי שיכולות לקחת היריבות במשחקים שנותרו, כדי שבני יהודה עדיין תעלה ליגה אם תיקח {effective_total} נקודות במהלך הפלייאוף העליון",
     )
     render_rival_caps_chart(target_team, scenario, int(effective_total))
 
