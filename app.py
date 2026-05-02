@@ -680,6 +680,86 @@ def build_random_promotion_mapping(max_attempts: int = 5000) -> dict[str, tuple[
     return None
 
 
+def official_results_signature() -> str:
+    return json.dumps(load_completed_results(), sort_keys=True, ensure_ascii=False)
+
+
+def current_results_signature() -> str:
+    return json.dumps(st.session_state.results, sort_keys=True, ensure_ascii=False)
+
+
+def official_pending_matches() -> list[tuple[str, str, str]]:
+    completed_results = load_completed_results()
+    pending: list[tuple[str, str, str]] = []
+    for round_number, fixtures in FIXTURES.items():
+        for match_number, (home_team, away_team) in enumerate(fixtures, start=1):
+            current_match_id = match_id(round_number, match_number)
+            if current_match_id not in completed_results:
+                pending.append((current_match_id, home_team, away_team))
+    return pending
+
+
+def current_pending_matches() -> list[tuple[str, str, str]]:
+    pending: list[tuple[str, str, str]] = []
+    for round_number, fixtures in FIXTURES.items():
+        for match_number, (home_team, away_team) in enumerate(fixtures, start=1):
+            current_match_id = match_id(round_number, match_number)
+            result = st.session_state.results[current_match_id]
+            if result["home_goals"] is None or result["away_goals"] is None:
+                pending.append((current_match_id, home_team, away_team))
+    return pending
+
+
+def bnei_yehuda_promoted_on_points_only(points_map: dict[str, int]) -> bool:
+    bnei_points = points_map["בני יהודה"]
+    teams_above = 0
+    teams_tied = 0
+
+    for team_name, team_points in points_map.items():
+        if team_name == "בני יהודה":
+            continue
+        if team_points > bnei_points:
+            teams_above += 1
+        elif team_points == bnei_points:
+            teams_tied += 1
+
+    return (teams_above + teams_tied) <= 1
+
+
+def estimate_bnei_yehuda_promotion_probability_from_results(
+    base_results: dict[str, dict[str, int | None]],
+    pending_matches: list[tuple[str, str, str]],
+    signature: str,
+    simulation_count: int = 20000,
+) -> dict[str, object]:
+    base_table = calculate_table_from_results(base_results, 7)
+    base_points = {row["team"]: int(row["points"]) for _, row in base_table.iterrows()}
+    promotion_count = 0
+
+    for _ in range(simulation_count):
+        simulated_points = base_points.copy()
+        for _, home_team, away_team in pending_matches:
+            outcome = random.randint(0, 2)
+            if outcome == 0:
+                simulated_points[home_team] += 3
+            elif outcome == 1:
+                simulated_points[home_team] += 1
+                simulated_points[away_team] += 1
+            else:
+                simulated_points[away_team] += 3
+
+        if bnei_yehuda_promoted_on_points_only(simulated_points):
+            promotion_count += 1
+
+    return {
+        "simulation_count": simulation_count,
+        "pending_match_count": len(pending_matches),
+        "promotion_count": promotion_count,
+        "promotion_probability": (promotion_count / simulation_count) if simulation_count else 0.0,
+        "results_signature": signature,
+    }
+
+
 def unresolved_match_ids_for_team(team: str) -> list[str]:
     pending_matches: list[str] = []
     for round_number, matches in FIXTURES.items():
@@ -1350,6 +1430,106 @@ def render_promotion_status_table(target_team: str = "בני יהודה") -> Non
         f"##### מספר הנקודות המירבי שיכולות לקחת היריבות במשחקים שנותרו, כדי שבני יהודה עדיין תעלה ליגה אם תיקח {effective_total} נקודות במהלך הפלייאוף העליון",
     )
     render_rival_caps_chart(target_team, scenario, int(effective_total))
+
+
+def render_promotion_probability_section() -> None:
+    st.markdown("### הסתברות עלייה משוערת")
+    st.markdown(
+        """
+        <div class="promotion-text">
+            לכל אחד מהמשחקים שנותרו יש הסתברות שווה:
+            ניצחון בית, תיקו או ניצחון חוץ. לצורך החישוב הזה שוויון נקודות נחשב לרעת בני יהודה, כלומר בני יהודה לא עולה.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    official_signature = official_results_signature()
+    current_signature = current_results_signature()
+    official_result = st.session_state.get("promotion_probability_official_result")
+    current_result = st.session_state.get("promotion_probability_current_result")
+
+    if official_result and official_result.get("results_signature") != official_signature:
+        st.session_state.pop("promotion_probability_official_result", None)
+        official_result = None
+    if current_result and current_result.get("results_signature") != current_signature:
+        st.session_state.pop("promotion_probability_current_result", None)
+        current_result = None
+
+    official_pending_count = len(official_pending_matches())
+    st.markdown(
+        f'<div class="promotion-text"><strong>לפי התוצאות הרשמיות, נותרו כרגע {official_pending_count} משחקים פתוחים.</strong></div>',
+        unsafe_allow_html=True,
+    )
+    if st.button("חשב הסתברות לפי התוצאות הרשמיות", use_container_width=True, key="estimate_promotion_probability_official_button"):
+        with st.spinner("מחשב הסתברות לפי התוצאות הרשמיות..."):
+            result = estimate_bnei_yehuda_promotion_probability_from_results(
+                base_results=merge_completed_results({}),
+                pending_matches=official_pending_matches(),
+                signature=official_signature,
+            )
+        st.session_state["promotion_probability_official_result"] = result
+        send_ga4_event(
+            "promotion_probability_estimated",
+            {
+                "source": "official",
+                "simulation_count": int(result["simulation_count"]),
+                "pending_match_count": int(result["pending_match_count"]),
+                "promotion_probability_percent": round(float(result["promotion_probability"]) * 100, 2),
+            },
+        )
+        official_result = result
+
+    if official_result:
+        probability_percent = float(official_result["promotion_probability"]) * 100
+        promotion_count = int(official_result["promotion_count"])
+        simulation_count = int(official_result["simulation_count"])
+        st.markdown(
+            f"""
+            <div class="status-box">
+                <strong>לפי התוצאות הרשמיות, הסתברות העלייה המשוערת של בני יהודה היא {probability_percent:.1f}%.</strong><br>
+                בני יהודה עלתה ב־{promotion_count:,} מתוך {simulation_count:,} סימולציות.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(
+        f'<div class="promotion-text"><strong>לפי ההזנה/הסימולציה הנוכחית במסך, נותרו כרגע {len(current_pending_matches())} משחקים פתוחים.</strong></div>',
+        unsafe_allow_html=True,
+    )
+    if st.button("חשב הסתברות לפי ההזנה הנוכחית", use_container_width=True, key="estimate_promotion_probability_current_button"):
+        with st.spinner("מחשב הסתברות לפי ההזנה הנוכחית..."):
+            result = estimate_bnei_yehuda_promotion_probability_from_results(
+                base_results=st.session_state.results,
+                pending_matches=current_pending_matches(),
+                signature=current_signature,
+            )
+        st.session_state["promotion_probability_current_result"] = result
+        send_ga4_event(
+            "promotion_probability_estimated",
+            {
+                "source": "current",
+                "simulation_count": int(result["simulation_count"]),
+                "pending_match_count": int(result["pending_match_count"]),
+                "promotion_probability_percent": round(float(result["promotion_probability"]) * 100, 2),
+            },
+        )
+        current_result = result
+
+    if current_result:
+        probability_percent = float(current_result["promotion_probability"]) * 100
+        promotion_count = int(current_result["promotion_count"])
+        simulation_count = int(current_result["simulation_count"])
+        st.markdown(
+            f"""
+            <div class="status-box">
+                <strong>לפי ההזנה/הסימולציה הנוכחית, הסתברות העלייה המשוערת של בני יהודה היא {probability_percent:.1f}%.</strong><br>
+                בני יהודה עלתה ב־{promotion_count:,} מתוך {simulation_count:,} סימולציות.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 def fixtures_overview() -> pd.DataFrame:
@@ -2093,6 +2273,8 @@ if all_playoff_results_complete():
         once_key="ga4_all_results_completed_sent",
     )
 
+st.markdown("---")
+render_promotion_probability_section()
 st.markdown("---")
 render_promotion_status_table("בני יהודה")
 
