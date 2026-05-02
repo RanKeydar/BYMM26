@@ -609,17 +609,17 @@ def latest_completed_round_number() -> int:
     return latest_round
 
 
-def has_additional_manual_updates(after_round: int) -> bool:
-    completed_results = load_completed_results()
-    for round_number in range(after_round + 1, 8):
+def latest_round_with_any_results() -> int:
+    latest_round = 0
+    for round_number in range(1, 8):
         for match_number, _ in enumerate(FIXTURES[round_number], start=1):
             current_match_id = match_id(round_number, match_number)
             result = st.session_state.results[current_match_id]
             if result["home_goals"] is None or result["away_goals"] is None:
                 continue
-            if current_match_id not in completed_results:
-                return True
-    return False
+            latest_round = round_number
+            break
+    return latest_round
 
 
 def current_table_metadata() -> tuple[str, str | None]:
@@ -627,13 +627,19 @@ def current_table_metadata() -> tuple[str, str | None]:
         return "טבלת סיום עונה", None
 
     latest_round = latest_completed_round_number()
-    if latest_round == 0:
+    latest_active_round = latest_round_with_any_results()
+
+    if latest_active_round == 0:
         return "טבלה עדכנית", "לפני פתיחת מחזורי הפלייאוף"
 
-    if has_additional_manual_updates(latest_round):
-        return "טבלה עדכנית", f"נכון לסיום מחזור {latest_round}, כולל תוצאות ידניות נוספות"
+    if latest_active_round > latest_round:
+        return "טבלה עדכנית", f"נכון למחזור {latest_active_round}"
 
     return "טבלה עדכנית", f"נכון לסיום מחזור {latest_round}"
+
+
+def is_round_completed_officially(round_number: int, completed_results: dict[str, dict[str, int | None]]) -> bool:
+    return all(match_id(round_number, match_number) in completed_results for match_number, _ in enumerate(FIXTURES[round_number], start=1))
 
 
 def build_random_promotion_mapping(max_attempts: int = 5000) -> dict[str, tuple[int, int]] | None:
@@ -1363,6 +1369,7 @@ def render_round_section(round_number: int, completed_results: dict[str, dict[st
     matches = FIXTURES[round_number]
     table_slot = st.empty()
     st.markdown("#### משחקים")
+    round_completed_officially = is_round_completed_officially(round_number, completed_results)
 
     for match_number, (home_team, away_team) in enumerate(matches, start=1):
         current_match_id = match_id(round_number, match_number)
@@ -1377,92 +1384,153 @@ def render_round_section(round_number: int, completed_results: dict[str, dict[st
                 unsafe_allow_html=True,
             )
         else:
-            (
-                away_minus_col,
-                away_input_col,
-                away_plus_col,
-                label_col,
-                home_minus_col,
-                home_input_col,
-                home_plus_col,
-            ) = st.columns([0.34, 0.5, 0.34, 5.3, 0.34, 0.5, 0.34])
-            with away_minus_col:
-                st.button(
-                    "-",
-                    key=f"{current_match_id}_away_minus",
-                    use_container_width=True,
-                    on_click=adjust_score,
-                    args=(current_match_id, "away", -1),
-                )
-            with away_input_col:
-                st.number_input(
-                    f"{away_team} שערים",
-                    min_value=0,
-                    step=1,
-                    value=int(st.session_state.get(away_key, 0)),
-                    key=away_key,
-                    label_visibility="collapsed",
-                    placeholder="ח",
-                    on_change=mark_score_touched,
-                    args=(current_match_id, "away"),
-                )
-            with away_plus_col:
-                st.button(
-                    "+",
-                    key=f"{current_match_id}_away_plus",
-                    use_container_width=True,
-                    on_click=adjust_score,
-                    args=(current_match_id, "away", 1),
-                )
-            with label_col:
+            if st.session_state.get("layout_mode") == "mobile":
                 st.markdown(
                     render_match_label(home_team, away_team, home_value, away_value, is_completed),
                     unsafe_allow_html=True,
                 )
-            with home_minus_col:
-                st.button(
-                    "-",
-                    key=f"{current_match_id}_home_minus",
-                    use_container_width=True,
-                    on_click=adjust_score,
-                    args=(current_match_id, "home", -1),
-                )
-            with home_input_col:
-                st.number_input(
-                    f"{home_team} שערים",
-                    min_value=0,
-                    step=1,
-                    value=int(st.session_state.get(home_key, 0)),
-                    key=home_key,
-                    label_visibility="collapsed",
-                    placeholder="ב",
-                    on_change=mark_score_touched,
-                    args=(current_match_id, "home"),
-                )
-            with home_plus_col:
-                st.button(
-                    "+",
-                    key=f"{current_match_id}_home_plus",
-                    use_container_width=True,
-                    on_click=adjust_score,
-                    args=(current_match_id, "home", 1),
-                )
 
-    action_col1, action_col2 = st.columns(2)
-    action_col1.button(
-        f"עדכן מחזור {round_number}",
-        key=f"update_round_{round_number}",
-        use_container_width=True,
-        on_click=update_round_results,
-        args=(round_number,),
-    )
-    action_col2.button(
-        f"איפוס מחזור {round_number}",
-        key=f"clear_round_{round_number}",
-        use_container_width=True,
-        on_click=clear_round_results,
-        args=(round_number,),
-    )
+                st.markdown(
+                    f'<div class="mobile-score-row-label">בית · {home_team}</div>',
+                    unsafe_allow_html=True,
+                )
+                home_plus_col, home_input_col, home_minus_col = st.columns([0.7, 0.9, 0.7])
+                with home_plus_col:
+                    st.button(
+                        "+",
+                        key=f"{current_match_id}_home_plus",
+                        use_container_width=True,
+                        on_click=adjust_score,
+                        args=(current_match_id, "home", 1),
+                    )
+                with home_input_col:
+                    st.markdown(
+                        f'<div class="mobile-score-value">{int(st.session_state.get(home_key, 0))}</div>',
+                        unsafe_allow_html=True,
+                    )
+                with home_minus_col:
+                    st.button(
+                        "-",
+                        key=f"{current_match_id}_home_minus",
+                        use_container_width=True,
+                        on_click=adjust_score,
+                        args=(current_match_id, "home", -1),
+                    )
+
+                st.markdown(
+                    f'<div class="mobile-score-row-label">חוץ · {away_team}</div>',
+                    unsafe_allow_html=True,
+                )
+                away_plus_col, away_input_col, away_minus_col = st.columns([0.7, 0.9, 0.7])
+                with away_plus_col:
+                    st.button(
+                        "+",
+                        key=f"{current_match_id}_away_plus",
+                        use_container_width=True,
+                        on_click=adjust_score,
+                        args=(current_match_id, "away", 1),
+                    )
+                with away_input_col:
+                    st.markdown(
+                        f'<div class="mobile-score-value">{int(st.session_state.get(away_key, 0))}</div>',
+                        unsafe_allow_html=True,
+                    )
+                with away_minus_col:
+                    st.button(
+                        "-",
+                        key=f"{current_match_id}_away_minus",
+                        use_container_width=True,
+                        on_click=adjust_score,
+                        args=(current_match_id, "away", -1),
+                    )
+            else:
+                (
+                    away_minus_col,
+                    away_input_col,
+                    away_plus_col,
+                    label_col,
+                    home_minus_col,
+                    home_input_col,
+                    home_plus_col,
+                ) = st.columns([0.34, 0.5, 0.34, 5.3, 0.34, 0.5, 0.34])
+                with away_minus_col:
+                    st.button(
+                        "-",
+                        key=f"{current_match_id}_away_minus",
+                        use_container_width=True,
+                        on_click=adjust_score,
+                        args=(current_match_id, "away", -1),
+                    )
+                with away_input_col:
+                    st.number_input(
+                        f"{away_team} שערים",
+                        min_value=0,
+                        step=1,
+                        value=int(st.session_state.get(away_key, 0)),
+                        key=away_key,
+                        label_visibility="collapsed",
+                        placeholder="ח",
+                        on_change=mark_score_touched,
+                        args=(current_match_id, "away"),
+                    )
+                with away_plus_col:
+                    st.button(
+                        "+",
+                        key=f"{current_match_id}_away_plus",
+                        use_container_width=True,
+                        on_click=adjust_score,
+                        args=(current_match_id, "away", 1),
+                    )
+                with label_col:
+                    st.markdown(
+                        render_match_label(home_team, away_team, home_value, away_value, is_completed),
+                        unsafe_allow_html=True,
+                    )
+                with home_minus_col:
+                    st.button(
+                        "-",
+                        key=f"{current_match_id}_home_minus",
+                        use_container_width=True,
+                        on_click=adjust_score,
+                        args=(current_match_id, "home", -1),
+                    )
+                with home_input_col:
+                    st.number_input(
+                        f"{home_team} שערים",
+                        min_value=0,
+                        step=1,
+                        value=int(st.session_state.get(home_key, 0)),
+                        key=home_key,
+                        label_visibility="collapsed",
+                        placeholder="ב",
+                        on_change=mark_score_touched,
+                        args=(current_match_id, "home"),
+                    )
+                with home_plus_col:
+                    st.button(
+                        "+",
+                        key=f"{current_match_id}_home_plus",
+                        use_container_width=True,
+                        on_click=adjust_score,
+                        args=(current_match_id, "home", 1),
+                    )
+
+    if not round_completed_officially:
+        action_col1, action_col2 = st.columns(2)
+        action_col1.button(
+            f"עדכן מחזור {round_number}",
+            key=f"update_round_{round_number}",
+            use_container_width=True,
+            on_click=update_round_results,
+            args=(round_number,),
+        )
+        action_col2.button(
+            f"איפוס מחזור {round_number}",
+            key=f"clear_round_{round_number}",
+            use_container_width=True,
+            on_click=clear_round_results,
+            args=(round_number,),
+        )
     with table_slot.container():
         updated_table = calculate_table_until_round(round_number)
         render_table(updated_table, f"מחזור {round_number}", compact=True)
@@ -1734,6 +1802,14 @@ st.markdown(
         padding-left: 0.12rem !important;
         padding-right: 0.12rem !important;
         font-size: 0.68rem !important;
+        -moz-appearance: textfield;
+        appearance: textfield;
+    }
+
+    .compact-round-box [data-testid="stNumberInput"] input::-webkit-outer-spin-button,
+    .compact-round-box [data-testid="stNumberInput"] input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
     }
 
     .compact-round-box [data-testid="column"] {
@@ -1838,6 +1914,29 @@ st.markdown(
         text-decoration: underline;
     }
 
+    .mobile-score-row-label {
+        direction: rtl;
+        text-align: right;
+        font-size: 0.76rem;
+        font-weight: 700;
+        color: #4d4a42;
+        margin-top: 0.28rem;
+        margin-bottom: 0.08rem;
+    }
+
+    .mobile-score-value {
+        direction: ltr;
+        text-align: center;
+        font-size: 0.92rem;
+        font-weight: 800;
+        color: #183153;
+        background: #f4f7fb;
+        border: 1px solid #dde6ee;
+        border-radius: 10px;
+        min-height: 22px;
+        line-height: 22px;
+    }
+
     @media (max-width: 900px) {
         .stApp {
             max-width: 100%;
@@ -1886,6 +1985,18 @@ st.markdown(
         .promotion-slider-label,
         .site-footer {
             font-size: 0.84rem;
+        }
+
+        .mobile-score-row-label {
+            font-size: 0.73rem;
+            margin-top: 0.18rem;
+            margin-bottom: 0.04rem;
+        }
+
+        .mobile-score-value {
+            font-size: 0.88rem;
+            min-height: 22px;
+            line-height: 22px;
         }
 
         .rival-chart-head {
