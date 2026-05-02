@@ -380,14 +380,30 @@ def playoff_points_so_far(team: str) -> int:
 
 
 def is_mobile_client() -> bool:
-    """Best-effort layout detection from the current request user agent."""
+    """Best-effort layout detection with optional query-param override."""
+    try:
+        query_params = st.query_params
+        layout_override = str(query_params.get("layout", "")).strip().lower()
+        if layout_override in {"mobile", "m", "1"}:
+            return True
+        if layout_override in {"desktop", "d", "0"}:
+            return False
+    except Exception:
+        pass
+
     try:
         headers = getattr(st.context, "headers", None)
         user_agent = ""
+        ua_mobile_hint = ""
         if headers is not None:
             user_agent = headers.get("user-agent", "") or headers.get("User-Agent", "")
+            ua_mobile_hint = headers.get("sec-ch-ua-mobile", "") or headers.get("Sec-CH-UA-Mobile", "")
     except Exception:
         user_agent = ""
+        ua_mobile_hint = ""
+
+    if str(ua_mobile_hint).strip() in {"?1", "1", "true", "True"}:
+        return True
 
     ua = str(user_agent).lower()
     mobile_tokens = ("mobile", "android", "iphone", "ipad", "ipod")
@@ -574,6 +590,50 @@ def calculate_table_from_results(
 
 def calculate_table_until_round(last_round: int) -> pd.DataFrame:
     return calculate_table_from_results(st.session_state.results, last_round)
+
+
+def latest_completed_round_number() -> int:
+    latest_round = 0
+    for round_number in range(1, 8):
+        round_is_complete = True
+        for match_number, _ in enumerate(FIXTURES[round_number], start=1):
+            current_match_id = match_id(round_number, match_number)
+            result = st.session_state.results[current_match_id]
+            if result["home_goals"] is None or result["away_goals"] is None:
+                round_is_complete = False
+                break
+        if round_is_complete:
+            latest_round = round_number
+        else:
+            break
+    return latest_round
+
+
+def has_additional_manual_updates(after_round: int) -> bool:
+    completed_results = load_completed_results()
+    for round_number in range(after_round + 1, 8):
+        for match_number, _ in enumerate(FIXTURES[round_number], start=1):
+            current_match_id = match_id(round_number, match_number)
+            result = st.session_state.results[current_match_id]
+            if result["home_goals"] is None or result["away_goals"] is None:
+                continue
+            if current_match_id not in completed_results:
+                return True
+    return False
+
+
+def current_table_metadata() -> tuple[str, str | None]:
+    if all_playoff_results_complete():
+        return "טבלת סיום עונה", None
+
+    latest_round = latest_completed_round_number()
+    if latest_round == 0:
+        return "טבלה עדכנית", "לפני פתיחת מחזורי הפלייאוף"
+
+    if has_additional_manual_updates(latest_round):
+        return "טבלה עדכנית", f"נכון לסיום מחזור {latest_round}, כולל תוצאות ידניות נוספות"
+
+    return "טבלה עדכנית", f"נכון לסיום מחזור {latest_round}"
 
 
 def build_random_promotion_mapping(max_attempts: int = 5000) -> dict[str, tuple[int, int]] | None:
@@ -1041,7 +1101,7 @@ def highlight_bnei_yehuda(row: pd.Series) -> list[str]:
 def render_table(table: pd.DataFrame, title: str, compact: bool = False, caption: str | None = None) -> None:
     st.markdown(f"#### {title}")
     if caption:
-        st.caption(caption)
+        st.markdown(f'<div class="table-caption">{caption}</div>', unsafe_allow_html=True)
 
     display_table = display_columns(table)
     if compact:
@@ -1415,7 +1475,8 @@ def render_round_group(
 ) -> None:
     if mobile_layout:
         for round_number in round_numbers:
-            render_round_section(round_number, completed_results)
+            with st.expander(f"מחזור {round_number}", expanded=False):
+                render_round_section(round_number, completed_results)
         return
 
     display_rounds = list(reversed(round_numbers))
@@ -1488,6 +1549,24 @@ st.markdown(
     h3, h4, h5 {
         text-align: right;
         width: 100%;
+    }
+
+    .table-caption {
+        direction: rtl;
+        text-align: right;
+        color: #66604f;
+        font-size: 0.82rem;
+        margin-bottom: 0.18rem;
+    }
+
+    [data-testid="stExpander"] summary {
+        direction: rtl;
+        text-align: right;
+    }
+
+    [data-testid="stExpanderDetails"] {
+        direction: rtl;
+        text-align: right;
     }
 
     .rtl-table {
@@ -1866,11 +1945,13 @@ for round_group in ([1, 2, 3], [4, 5, 6]):
 
 
 if mobile_layout:
-    render_round_section(7, completed_results)
+    with st.expander("מחזור 7", expanded=False):
+        render_round_section(7, completed_results)
     final_table = calculate_table_until_round(7)
+    final_table_title, final_table_caption = current_table_metadata()
     bnei_yehuda_row = final_table[final_table["team"] == "בני יהודה"].iloc[0]
     bnei_yehuda_rank = int(bnei_yehuda_row["rank"])
-    render_table(final_table, "טבלת סיום עונה", compact=True)
+    render_table(final_table, final_table_title, compact=True, caption=final_table_caption)
     if bnei_yehuda_rank <= 2:
         st.success("בני יהודה עולה לליגת העל")
     else:
@@ -1883,9 +1964,10 @@ else:
 
     with last_row_col_final:
         final_table = calculate_table_until_round(7)
+        final_table_title, final_table_caption = current_table_metadata()
         bnei_yehuda_row = final_table[final_table["team"] == "בני יהודה"].iloc[0]
         bnei_yehuda_rank = int(bnei_yehuda_row["rank"])
-        render_table(final_table, "טבלת סיום עונה", compact=True)
+        render_table(final_table, final_table_title, compact=True, caption=final_table_caption)
         if bnei_yehuda_rank <= 2:
             st.success("בני יהודה עולה לליגת העל")
         else:
