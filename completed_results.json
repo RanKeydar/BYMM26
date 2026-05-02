@@ -11,8 +11,24 @@
         "home_goals": 0,
         "away_goals": 0
     },
-    "r1_m4": {
-        "home_goals": 0,
-        "away_goals": 5
-    }
+  "r1_m4": {
+    "home_goals": 0,
+    "away_goals": 5
+  },
+  "r2_m1": {
+    "home_goals": 2,
+    "away_goals": 4
+  },
+  "r2_m2": {
+    "home_goals": 1,
+    "away_goals": 2
+  },
+  "r2_m3": {
+    "home_goals": 2,
+    "away_goals": 2
+  },
+  "r2_m4": {
+    "home_goals": 0,
+    "away_goals": 1
+  }
 }
