@@ -1446,6 +1446,7 @@ def render_promotion_probability_section() -> None:
 
     official_signature = official_results_signature()
     current_signature = current_results_signature()
+    current_matches_official = official_signature == current_signature
     official_result = st.session_state.get("promotion_probability_official_result")
     current_result = st.session_state.get("promotion_probability_current_result")
 
@@ -1493,6 +1494,18 @@ def render_promotion_probability_section() -> None:
             """,
             unsafe_allow_html=True,
         )
+
+    if current_matches_official:
+        st.markdown(
+            f"""
+            <div class="status-box">
+                <strong>כרגע ההזנה שעל המסך זהה לתוצאות הרשמיות.</strong><br>
+                לכן לא מוצג חישוב נפרד, כדי להימנע מהבדלים אקראיים בין שתי סימולציות של אותו מצב בדיוק.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        return
 
     st.markdown(
         f'<div class="promotion-text"><strong>לפי ההזנה/הסימולציה הנוכחית במסך, נותרו כרגע {len(current_pending_matches())} משחקים פתוחים.</strong></div>',
