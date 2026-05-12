@@ -244,7 +244,7 @@ def update_round_results(round_number: int) -> None:
         st.session_state[f"{current_match_id}_home_touched"] = True
         st.session_state[f"{current_match_id}_away_touched"] = True
     send_ga4_event(
-        "round_updated",
+        "round_results_updated",
         {
             "round_number": round_number,
             "round_completed_matches": sum(
@@ -1471,9 +1471,8 @@ def render_promotion_probability_section() -> None:
             )
         st.session_state["promotion_probability_official_result"] = result
         send_ga4_event(
-            "promotion_probability_estimated",
+            "official_results_probability_checked",
             {
-                "source": "official",
                 "simulation_count": int(result["simulation_count"]),
                 "pending_match_count": int(result["pending_match_count"]),
                 "promotion_probability_percent": round(float(result["promotion_probability"]) * 100, 2),
@@ -1520,9 +1519,8 @@ def render_promotion_probability_section() -> None:
             )
         st.session_state["promotion_probability_current_result"] = result
         send_ga4_event(
-            "promotion_probability_estimated",
+            "current_input_probability_checked",
             {
-                "source": "current",
                 "simulation_count": int(result["simulation_count"]),
                 "pending_match_count": int(result["pending_match_count"]),
                 "promotion_probability_percent": round(float(result["promotion_probability"]) * 100, 2),
@@ -2232,7 +2230,7 @@ if load_random_promotion:
     else:
         set_results_from_mapping(random_mapping)
         send_ga4_event(
-            "random_promotion_loaded",
+            "random_promotion_scenario_loaded",
             {
                 "randomized_match_count": len(random_mapping),
             },
