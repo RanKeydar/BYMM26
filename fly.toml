@@ -5,6 +5,11 @@ primary_region = "fra"
 
 [env]
   PORT = "8501"
+  COMPLETED_RESULTS_PATH = "/data/completed_results.json"
+
+[mounts]
+  source = "by26_data"
+  destination = "/data"
 
 [http_service]
   internal_port = 8501
