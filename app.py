@@ -1,461 +1,43 @@
 import json
-import os
 import random
-import time
+
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
-import urllib.error
-import urllib.request
-import uuid
+
+from data.league_data import FIXTURES, TEAMS
+from core.results import (
+    adjust_score,
+    clear_inputs_and_results,
+    clear_round_results,
+    current_match_score,
+    current_pending_matches,
+    current_results_signature,
+    ensure_session_state,
+    load_completed_results,
+    mark_score_touched,
+    match_id,
+    merge_completed_results,
+    official_pending_matches,
+    official_results_signature,
+    pending_matches,
+    set_results_from_mapping,
+    unresolved_match_ids_for_team,
+    update_round_results,
+)
+from core.standings import (
+    all_playoff_results_complete,
+    calculate_table_from_results,
+    calculate_table_until_round,
+    current_table_metadata,
+    is_round_completed_officially,
+    playoff_points_so_far,
+)
+from services.analytics import send_ga4_event, send_ga4_page_view
+from ui.admin import render_admin_panel
 
 
 st.set_page_config(page_title="מעלה מעלה", layout="wide")
-
-GA_MEASUREMENT_ID = os.getenv("GA4_MEASUREMENT_ID", "G-2F4JGD7RLN")
-COMPLETED_RESULTS_PATH = os.getenv("COMPLETED_RESULTS_PATH", "completed_results.json")
-ADMIN_TOKEN = os.getenv("ADMIN_TOKEN")
-
-TEAMS = [
-    {"team": 'מכבי פ"ת', "goals_for": 67, "goals_against": 32, "points": 60},
-    {"team": "מכבי הרצליה", "goals_for": 45, "goals_against": 35, "points": 50},
-    {"team": 'הפועל ר"ג', "goals_for": 48, "goals_against": 36, "points": 49},
-    {"team": 'הפועל ראשל"צ', "goals_for": 43, "goals_against": 33, "points": 48},
-    {"team": "הפועל כפר שלם", "goals_for": 51, "goals_against": 47, "points": 47},
-    {"team": "בני יהודה", "goals_for": 34, "goals_against": 37, "points": 44},
-    {"team": "קרית ים", "goals_for": 43, "goals_against": 37, "points": 42},
-    {"team": 'הפועל כפ"ס', "goals_for": 38, "goals_against": 39, "points": 41},
-]
-
-
-FIXTURES = {
-    1: [
-        ('מכבי פ"ת', "הפועל כפר שלם"),
-        ('הפועל ר"ג', "בני יהודה"),
-        ("מכבי הרצליה", "קרית ים"),
-        ('הפועל ראשל"צ', 'הפועל כפ"ס'),
-    ],
-    2: [
-        ("הפועל כפר שלם", 'הפועל כפ"ס'),
-        ('מכבי פ"ת', "מכבי הרצליה"),
-        ("בני יהודה", 'הפועל ראשל"צ'),
-        ("קרית ים", 'הפועל ר"ג'),
-    ],
-    3: [
-        ("מכבי הרצליה", "הפועל כפר שלם"),
-        ('הפועל ר"ג', 'מכבי פ"ת'),
-        ('הפועל ראשל"צ', "קרית ים"),
-        ('הפועל כפ"ס', "בני יהודה"),
-    ],
-    4: [
-        ("הפועל כפר שלם", "בני יהודה"),
-        ("מכבי הרצליה", 'הפועל ר"ג'),
-        ("קרית ים", 'הפועל כפ"ס'),
-        ('מכבי פ"ת', 'הפועל ראשל"צ'),
-    ],
-    5: [
-        ('הפועל כפ"ס', 'מכבי פ"ת'),
-        ('הפועל ר"ג', "הפועל כפר שלם"),
-        ('הפועל ראשל"צ', "מכבי הרצליה"),
-        ("בני יהודה", "קרית ים"),
-    ],
-    6: [
-        ("מכבי הרצליה", 'הפועל כפ"ס'),
-        ('הפועל ר"ג', 'הפועל ראשל"צ'),
-        ("הפועל כפר שלם", "קרית ים"),
-        ('מכבי פ"ת', "בני יהודה"),
-    ],
-    7: [
-        ('הפועל כפ"ס', 'הפועל ר"ג'),
-        ("קרית ים", 'מכבי פ"ת'),
-        ('הפועל ראשל"צ', "הפועל כפר שלם"),
-        ("בני יהודה", "מכבי הרצליה"),
-    ],
-}
-
-
-SCENARIOS = {
-    "A. תרחיש ריק / ידני": {},
-    "B. תרחיש ריאלי יותר לעלייה של בני יהודה": {
-        "r1_m1": (2, 1),
-        "r1_m2": (1, 1),
-        "r1_m3": (1, 0),
-        "r1_m4": (2, 1),
-        "r2_m1": (1, 1),
-        "r2_m2": (2, 1),
-        "r2_m3": (2, 1),
-        "r2_m4": (1, 1),
-        "r3_m1": (1, 1),
-        "r3_m2": (1, 0),
-        "r3_m3": (1, 1),
-        "r3_m4": (0, 1),
-        "r4_m1": (1, 2),
-        "r4_m2": (0, 0),
-        "r4_m3": (1, 1),
-        "r4_m4": (2, 1),
-        "r5_m1": (0, 2),
-        "r5_m2": (1, 1),
-        "r5_m3": (1, 0),
-        "r5_m4": (2, 0),
-        "r6_m1": (1, 1),
-        "r6_m2": (1, 1),
-        "r6_m3": (1, 1),
-        "r6_m4": (1, 1),
-        "r7_m1": (1, 1),
-        "r7_m2": (1, 2),
-        "r7_m3": (1, 1),
-        "r7_m4": (2, 1),
-    },
-}
-
-
-def match_id(round_number: int, match_number: int) -> str:
-    return f"r{round_number}_m{match_number}"
-
-
-def empty_results() -> dict[str, dict[str, int | None]]:
-    results: dict[str, dict[str, int | None]] = {}
-    for round_number, matches in FIXTURES.items():
-        for match_number, _ in enumerate(matches, start=1):
-            results[match_id(round_number, match_number)] = {
-                "home_goals": None,
-                "away_goals": None,
-            }
-    return results
-
-
-def load_completed_results() -> dict[str, dict[str, int | None]]:
-    if not os.path.exists(COMPLETED_RESULTS_PATH):
-        return {}
-
-    with open(COMPLETED_RESULTS_PATH, "r", encoding="utf-8") as file:
-        raw_data = json.load(file)
-
-    completed_results: dict[str, dict[str, int | None]] = {}
-    for current_match_id, score in raw_data.items():
-        completed_results[current_match_id] = {
-            "home_goals": score.get("home_goals"),
-            "away_goals": score.get("away_goals"),
-        }
-    return completed_results
-
-def save_completed_results(completed_results: dict[str, dict[str, int | None]]) -> None:
-    with open(COMPLETED_RESULTS_PATH, "w", encoding="utf-8") as file:
-        json.dump(completed_results, file, ensure_ascii=False, indent=2)
-
-
-def is_admin_mode() -> bool:
-    if not ADMIN_TOKEN:
-        return False
-
-    try:
-        provided_token = str(st.query_params.get("admin_token", "")).strip()
-    except Exception:
-        return False
-
-    if provided_token == ADMIN_TOKEN:
-        st.session_state["is_admin"] = True
-
-    return bool(st.session_state.get("is_admin", False))
-
-
-def apply_completed_result_to_session(current_match_id: str, home_goals: int, away_goals: int) -> None:
-    st.session_state.results[current_match_id] = {
-        "home_goals": home_goals,
-        "away_goals": away_goals,
-    }
-    st.session_state[f"{current_match_id}_home"] = home_goals
-    st.session_state[f"{current_match_id}_away"] = away_goals
-    st.session_state[f"{current_match_id}_home_touched"] = True
-    st.session_state[f"{current_match_id}_away_touched"] = True
-
-
-def render_admin_panel() -> None:
-    if not is_admin_mode():
-        return
-
-    st.divider()
-
-    with st.expander("ניהול תוצאות סופיות", expanded=False):
-        st.warning("מצב מנהל פעיל — עדכון כאן ישמור תוצאה סופית וינעל את המשחק לכל המשתמשים.")
-
-        completed_results = load_completed_results()
-
-        round_number = st.selectbox(
-            "בחר מחזור",
-            options=list(FIXTURES.keys()),
-            key="admin_round_number",
-        )
-
-        match_options = []
-        for match_number, (home_team, away_team) in enumerate(FIXTURES[round_number], start=1):
-            current_match_id = match_id(round_number, match_number)
-            match_options.append(
-                {
-                    "match_id": current_match_id,
-                    "home_team": home_team,
-                    "away_team": away_team,
-                    "label": f"{home_team} - {away_team}",
-                }
-            )
-
-        selected_match = st.selectbox(
-            "בחר משחק",
-            options=match_options,
-            format_func=lambda match: match["label"],
-            key="admin_selected_match",
-        )
-
-        current_match_id = selected_match["match_id"]
-        existing_score = completed_results.get(
-            current_match_id,
-            {"home_goals": 0, "away_goals": 0},
-        )
-
-        home_default = existing_score.get("home_goals")
-        away_default = existing_score.get("away_goals")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            home_goals = st.number_input(
-                f"שערים — {selected_match['home_team']}",
-                min_value=0,
-                max_value=20,
-                value=0 if home_default is None else int(home_default),
-                step=1,
-                key=f"admin_{current_match_id}_home_goals",
-            )
-
-        with col2:
-            away_goals = st.number_input(
-                f"שערים — {selected_match['away_team']}",
-                min_value=0,
-                max_value=20,
-                value=0 if away_default is None else int(away_default),
-                step=1,
-                key=f"admin_{current_match_id}_away_goals",
-            )
-
-        save_col, delete_col = st.columns(2)
-
-        with save_col:
-            if st.button("שמור כתוצאה סופית", type="primary", key=f"admin_save_{current_match_id}"):
-                completed_results[current_match_id] = {
-                    "home_goals": int(home_goals),
-                    "away_goals": int(away_goals),
-                }
-                save_completed_results(completed_results)
-                apply_completed_result_to_session(
-                    current_match_id=current_match_id,
-                    home_goals=int(home_goals),
-                    away_goals=int(away_goals),
-                )
-                send_ga4_event(
-                    "admin_completed_result_saved",
-                    {
-                        "match_id": current_match_id,
-                        "round_number": round_number,
-                    },
-                )
-                st.success("התוצאה נשמרה כתוצאה סופית.")
-                st.rerun()
-
-        with delete_col:
-            if current_match_id in completed_results:
-                if st.button("בטל נעילת תוצאה", key=f"admin_delete_{current_match_id}"):
-                    completed_results.pop(current_match_id, None)
-                    save_completed_results(completed_results)
-
-                    st.session_state.results = merge_completed_results({})
-                    st.session_state[f"{current_match_id}_home"] = 0
-                    st.session_state[f"{current_match_id}_away"] = 0
-                    st.session_state[f"{current_match_id}_home_touched"] = False
-                    st.session_state[f"{current_match_id}_away_touched"] = False
-
-                    send_ga4_event(
-                        "admin_completed_result_deleted",
-                        {
-                            "match_id": current_match_id,
-                            "round_number": round_number,
-                        },
-                    )
-                    st.success("התוצאה הסופית הוסרה. המשחק חזר לעריכה רגילה.")
-                    st.rerun()
-
-def merge_completed_results(results: dict[str, dict[str, int | None]]) -> dict[str, dict[str, int | None]]:
-    merged_results = empty_results()
-    for current_match_id, score in results.items():
-        merged_results[current_match_id] = {
-            "home_goals": score.get("home_goals"),
-            "away_goals": score.get("away_goals"),
-        }
-
-    for current_match_id, score in load_completed_results().items():
-        merged_results[current_match_id] = score
-
-    return merged_results
-
-
-def ensure_session_state() -> None:
-    if "results" not in st.session_state:
-        st.session_state.results = merge_completed_results({})
-
-    for round_number, matches in FIXTURES.items():
-        for match_number, _ in enumerate(matches, start=1):
-            current_match_id = match_id(round_number, match_number)
-            home_key = f"{current_match_id}_home"
-            away_key = f"{current_match_id}_away"
-            home_touched_key = f"{current_match_id}_home_touched"
-            away_touched_key = f"{current_match_id}_away_touched"
-            if home_key not in st.session_state:
-                home_goals = st.session_state.results[current_match_id]["home_goals"]
-                st.session_state[home_key] = 0 if home_goals is None else home_goals
-            if away_key not in st.session_state:
-                away_goals = st.session_state.results[current_match_id]["away_goals"]
-                st.session_state[away_key] = 0 if away_goals is None else away_goals
-            if home_touched_key not in st.session_state:
-                st.session_state[home_touched_key] = st.session_state.results[current_match_id]["home_goals"] is not None
-            if away_touched_key not in st.session_state:
-                st.session_state[away_touched_key] = st.session_state.results[current_match_id]["away_goals"] is not None
-
-
-def mark_score_touched(current_match_id: str, side: str) -> None:
-    st.session_state[f"{current_match_id}_{side}_touched"] = True
-
-
-def adjust_score(current_match_id: str, side: str, delta: int) -> None:
-    score_key = f"{current_match_id}_{side}"
-    touched_key = f"{current_match_id}_{side}_touched"
-    current_value = int(st.session_state.get(score_key, 0))
-    st.session_state[score_key] = max(0, current_value + delta)
-    st.session_state[touched_key] = True
-
-
-def set_results_from_mapping(mapping: dict[str, tuple[int, int]]) -> None:
-    st.session_state.results = merge_completed_results({})
-
-    for round_number, matches in FIXTURES.items():
-        for match_number, _ in enumerate(matches, start=1):
-            current_match_id = match_id(round_number, match_number)
-            home_key = f"{current_match_id}_home"
-            away_key = f"{current_match_id}_away"
-            home_touched_key = f"{current_match_id}_home_touched"
-            away_touched_key = f"{current_match_id}_away_touched"
-            score = mapping.get(current_match_id)
-            completed_score = load_completed_results().get(current_match_id)
-
-            if completed_score is not None:
-                st.session_state[home_key] = completed_score["home_goals"]
-                st.session_state[away_key] = completed_score["away_goals"]
-                st.session_state[home_touched_key] = True
-                st.session_state[away_touched_key] = True
-                st.session_state.results[current_match_id] = completed_score
-            elif score is None:
-                st.session_state[home_key] = 0
-                st.session_state[away_key] = 0
-                st.session_state[home_touched_key] = False
-                st.session_state[away_touched_key] = False
-            else:
-                st.session_state[home_key] = score[0]
-                st.session_state[away_key] = score[1]
-                st.session_state[home_touched_key] = True
-                st.session_state[away_touched_key] = True
-                st.session_state.results[current_match_id] = {
-                    "home_goals": score[0],
-                    "away_goals": score[1],
-                }
-
-
-def update_round_results(round_number: int) -> None:
-    for match_number, _ in enumerate(FIXTURES[round_number], start=1):
-        current_match_id = match_id(round_number, match_number)
-        if current_match_id in load_completed_results():
-            continue
-        home_touched = st.session_state.get(f"{current_match_id}_home_touched", False)
-        away_touched = st.session_state.get(f"{current_match_id}_away_touched", False)
-        if not home_touched and not away_touched:
-            st.session_state.results[current_match_id] = {"home_goals": None, "away_goals": None}
-            continue
-
-        home_goals = int(st.session_state.get(f"{current_match_id}_home", 0))
-        away_goals = int(st.session_state.get(f"{current_match_id}_away", 0))
-        st.session_state.results[current_match_id] = {
-            "home_goals": home_goals,
-            "away_goals": away_goals,
-        }
-        st.session_state[f"{current_match_id}_home_touched"] = True
-        st.session_state[f"{current_match_id}_away_touched"] = True
-    send_ga4_event(
-        "round_results_updated",
-        {
-            "round_number": round_number,
-            "round_completed_matches": sum(
-                1
-                for match_number, _ in enumerate(FIXTURES[round_number], start=1)
-                if (
-                    st.session_state.results[match_id(round_number, match_number)]["home_goals"] is not None
-                    and st.session_state.results[match_id(round_number, match_number)]["away_goals"] is not None
-                )
-            ),
-        },
-    )
-
-
-def clear_inputs_and_results() -> None:
-    st.session_state.results = merge_completed_results({})
-    for round_number, matches in FIXTURES.items():
-        for match_number, _ in enumerate(matches, start=1):
-            current_match_id = match_id(round_number, match_number)
-            completed_score = load_completed_results().get(current_match_id)
-            if completed_score is not None:
-                st.session_state[f"{current_match_id}_home"] = completed_score["home_goals"]
-                st.session_state[f"{current_match_id}_away"] = completed_score["away_goals"]
-                st.session_state[f"{current_match_id}_home_touched"] = True
-                st.session_state[f"{current_match_id}_away_touched"] = True
-            else:
-                st.session_state[f"{current_match_id}_home"] = 0
-                st.session_state[f"{current_match_id}_away"] = 0
-                st.session_state[f"{current_match_id}_home_touched"] = False
-                st.session_state[f"{current_match_id}_away_touched"] = False
-    send_ga4_event("all_results_reset")
-
-
-def clear_round_results(round_number: int) -> None:
-    for match_number, _ in enumerate(FIXTURES[round_number], start=1):
-        current_match_id = match_id(round_number, match_number)
-        completed_score = load_completed_results().get(current_match_id)
-        if completed_score is not None:
-            st.session_state.results[current_match_id] = completed_score
-            st.session_state[f"{current_match_id}_home"] = completed_score["home_goals"]
-            st.session_state[f"{current_match_id}_away"] = completed_score["away_goals"]
-            st.session_state[f"{current_match_id}_home_touched"] = True
-            st.session_state[f"{current_match_id}_away_touched"] = True
-            continue
-        st.session_state.results[current_match_id] = {"home_goals": None, "away_goals": None}
-        st.session_state[f"{current_match_id}_home"] = 0
-        st.session_state[f"{current_match_id}_away"] = 0
-        st.session_state[f"{current_match_id}_home_touched"] = False
-        st.session_state[f"{current_match_id}_away_touched"] = False
-    send_ga4_event(
-        "round_reset",
-        {
-            "round_number": round_number,
-        },
-    )
-
-
-def current_match_score(current_match_id: str) -> tuple[int | None, int | None]:
-    home_touched = st.session_state.get(f"{current_match_id}_home_touched", False)
-    away_touched = st.session_state.get(f"{current_match_id}_away_touched", False)
-    if not home_touched and not away_touched:
-        return 0, 0
-
-    home_value = st.session_state.get(f"{current_match_id}_home", 0)
-    away_value = st.session_state.get(f"{current_match_id}_away", 0)
-    return home_value, away_value
-
-
 def match_side_class(side: str, home_goals: int | None, away_goals: int | None) -> str:
     if home_goals is None or away_goals is None:
         return ""
@@ -492,34 +74,8 @@ def render_match_label(
     )
 
 
-def all_playoff_results_complete() -> bool:
-    for score in st.session_state.results.values():
-        if score["home_goals"] is None or score["away_goals"] is None:
-            return False
-    return True
 
 
-def playoff_points_so_far(team: str) -> int:
-    points = 0
-    for round_number, matches in FIXTURES.items():
-        for match_number, (home_team, away_team) in enumerate(matches, start=1):
-            if team not in (home_team, away_team):
-                continue
-
-            current_match_id = match_id(round_number, match_number)
-            result = st.session_state.results[current_match_id]
-            home_goals = result["home_goals"]
-            away_goals = result["away_goals"]
-
-            if home_goals is None or away_goals is None:
-                continue
-
-            if home_goals == away_goals:
-                points += 1
-            elif (team == home_team and home_goals > away_goals) or (team == away_team and away_goals > home_goals):
-                points += 3
-
-    return points
 
 
 def is_mobile_client() -> bool:
@@ -553,103 +109,16 @@ def is_mobile_client() -> bool:
     return any(token in ua for token in mobile_tokens)
 
 
-def completed_match_count() -> int:
-    return sum(
-        1
-        for score in st.session_state.results.values()
-        if score["home_goals"] is not None and score["away_goals"] is not None
-    )
 
 
-def open_match_count() -> int:
-    return len(st.session_state.results) - completed_match_count()
 
 
-def current_page_location() -> str:
-    try:
-        headers = getattr(st.context, "headers", None)
-        if headers is None:
-            return "https://malamala-by26.fly.dev"
-
-        host = headers.get("host", "") or headers.get("Host", "")
-        forwarded_proto = headers.get("x-forwarded-proto", "") or headers.get("X-Forwarded-Proto", "")
-        if host:
-            scheme = forwarded_proto or ("http" if "localhost" in host or "127.0.0.1" in host else "https")
-            return f"{scheme}://{host}"
-    except Exception:
-        pass
-    return "https://malamala-by26.fly.dev"
 
 
-def ensure_ga4_identity() -> None:
-    if "ga4_client_id" not in st.session_state:
-        st.session_state.ga4_client_id = str(uuid.uuid4())
-    if "ga4_session_id" not in st.session_state:
-        st.session_state.ga4_session_id = int(time.time())
 
 
-def send_ga4_event(name: str, params: dict[str, object] | None = None, once_key: str | None = None) -> None:
-    api_secret = os.getenv("GA4_API_SECRET")
-    if not api_secret:
-        return
-
-    if once_key is not None and st.session_state.get(once_key, False):
-        return
-
-    ensure_ga4_identity()
-    event_params: dict[str, object] = {
-        "session_id": st.session_state.ga4_session_id,
-        "engagement_time_msec": 1,
-        "layout_mode": st.session_state.get("layout_mode", "unknown"),
-        "completed_match_count": completed_match_count(),
-        "open_match_count": open_match_count(),
-    }
-    if params:
-        event_params.update(params)
-    if os.getenv("GA4_DEBUG_MODE") == "1":
-        event_params["debug_mode"] = 1
-
-    payload = {
-        "client_id": st.session_state.ga4_client_id,
-        "user_properties": {
-            "layout_mode": {"value": str(st.session_state.get("layout_mode", "unknown"))},
-        },
-        "events": [
-            {
-                "name": name,
-                "params": event_params,
-            }
-        ],
-    }
-
-    endpoint = (
-        "https://www.google-analytics.com/mp/collect"
-        f"?measurement_id={GA_MEASUREMENT_ID}&api_secret={api_secret}"
-    )
-    request = urllib.request.Request(
-        endpoint,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-    try:
-        with urllib.request.urlopen(request, timeout=5):
-            if once_key is not None:
-                st.session_state[once_key] = True
-    except (urllib.error.URLError, TimeoutError):
-        pass
 
 
-def send_ga4_page_view() -> None:
-    send_ga4_event(
-        "page_view",
-        {
-            "page_title": "מעלה מעלה",
-            "page_location": current_page_location(),
-        },
-        once_key="ga4_page_view_sent",
-    )
 
 
 def sample_score_for_outcome(outcome: str) -> tuple[int, int]:
@@ -660,129 +129,20 @@ def sample_score_for_outcome(outcome: str) -> tuple[int, int]:
     return random.choice([(0, 1), (0, 2), (1, 2), (1, 3), (2, 3)])
 
 
-def build_table() -> pd.DataFrame:
-    base_table = pd.DataFrame(TEAMS).copy()
-    base_table["wins"] = 0
-    base_table["draws"] = 0
-    base_table["losses"] = 0
-    base_table["goal_difference"] = base_table["goals_for"] - base_table["goals_against"]
-    return base_table.set_index("team")
 
 
-def apply_match_result(table: pd.DataFrame, home_team: str, away_team: str, home_goals: int, away_goals: int) -> None:
-    table.loc[home_team, "goals_for"] += home_goals
-    table.loc[home_team, "goals_against"] += away_goals
-    table.loc[away_team, "goals_for"] += away_goals
-    table.loc[away_team, "goals_against"] += home_goals
-
-    if home_goals > away_goals:
-        table.loc[home_team, "points"] += 3
-        table.loc[home_team, "wins"] += 1
-        table.loc[away_team, "losses"] += 1
-    elif home_goals < away_goals:
-        table.loc[away_team, "points"] += 3
-        table.loc[away_team, "wins"] += 1
-        table.loc[home_team, "losses"] += 1
-    else:
-        table.loc[home_team, "points"] += 1
-        table.loc[away_team, "points"] += 1
-        table.loc[home_team, "draws"] += 1
-        table.loc[away_team, "draws"] += 1
-
-    table["goal_difference"] = table["goals_for"] - table["goals_against"]
 
 
-def calculate_table_from_results(
-    results: dict[str, dict[str, int | None]],
-    last_round: int = 7,
-) -> pd.DataFrame:
-    table = build_table()
-
-    for round_number in range(1, last_round + 1):
-        for match_number, (home_team, away_team) in enumerate(FIXTURES[round_number], start=1):
-            current_match_id = match_id(round_number, match_number)
-            result = results[current_match_id]
-
-            if result["home_goals"] is None or result["away_goals"] is None:
-                continue
-
-            apply_match_result(
-                table=table,
-                home_team=home_team,
-                away_team=away_team,
-                home_goals=int(result["home_goals"]),
-                away_goals=int(result["away_goals"]),
-            )
-
-    # דירוג סופי:
-    # 1. יותר נקודות
-    # 2. הפרש שערים גבוה יותר
-    # 3. יותר שערי זכות
-    table = (
-        table.reset_index()
-        .sort_values(
-            by=["points", "goal_difference", "goals_for"],
-            ascending=[False, False, False],
-            kind="mergesort",
-        )
-        .reset_index(drop=True)
-    )
-    table.insert(0, "rank", table.index + 1)
-    return table
 
 
-def calculate_table_until_round(last_round: int) -> pd.DataFrame:
-    return calculate_table_from_results(st.session_state.results, last_round)
 
 
-def latest_completed_round_number() -> int:
-    latest_round = 0
-    for round_number in range(1, 8):
-        round_is_complete = True
-        for match_number, _ in enumerate(FIXTURES[round_number], start=1):
-            current_match_id = match_id(round_number, match_number)
-            result = st.session_state.results[current_match_id]
-            if result["home_goals"] is None or result["away_goals"] is None:
-                round_is_complete = False
-                break
-        if round_is_complete:
-            latest_round = round_number
-        else:
-            break
-    return latest_round
 
 
-def latest_round_with_any_results() -> int:
-    latest_round = 0
-    for round_number in range(1, 8):
-        for match_number, _ in enumerate(FIXTURES[round_number], start=1):
-            current_match_id = match_id(round_number, match_number)
-            result = st.session_state.results[current_match_id]
-            if result["home_goals"] is None or result["away_goals"] is None:
-                continue
-            latest_round = round_number
-            break
-    return latest_round
 
 
-def current_table_metadata() -> tuple[str, str | None]:
-    if all_playoff_results_complete():
-        return "טבלת סיום עונה", None
-
-    latest_round = latest_completed_round_number()
-    latest_active_round = latest_round_with_any_results()
-
-    if latest_active_round == 0:
-        return "טבלה עדכנית", "לפני פתיחת מחזורי הפלייאוף"
-
-    if latest_active_round > latest_round:
-        return "טבלה עדכנית", f"נכון למחזור {latest_active_round}"
-
-    return "טבלה עדכנית", f"נכון לסיום מחזור {latest_round}"
 
 
-def is_round_completed_officially(round_number: int, completed_results: dict[str, dict[str, int | None]]) -> bool:
-    return all(match_id(round_number, match_number) in completed_results for match_number, _ in enumerate(FIXTURES[round_number], start=1))
 
 
 def build_random_promotion_mapping(max_attempts: int = 5000) -> dict[str, tuple[int, int]] | None:
@@ -823,34 +183,12 @@ def build_random_promotion_mapping(max_attempts: int = 5000) -> dict[str, tuple[
     return None
 
 
-def official_results_signature() -> str:
-    return json.dumps(load_completed_results(), sort_keys=True, ensure_ascii=False)
 
 
-def current_results_signature() -> str:
-    return json.dumps(st.session_state.results, sort_keys=True, ensure_ascii=False)
 
 
-def official_pending_matches() -> list[tuple[str, str, str]]:
-    completed_results = load_completed_results()
-    pending: list[tuple[str, str, str]] = []
-    for round_number, fixtures in FIXTURES.items():
-        for match_number, (home_team, away_team) in enumerate(fixtures, start=1):
-            current_match_id = match_id(round_number, match_number)
-            if current_match_id not in completed_results:
-                pending.append((current_match_id, home_team, away_team))
-    return pending
 
 
-def current_pending_matches() -> list[tuple[str, str, str]]:
-    pending: list[tuple[str, str, str]] = []
-    for round_number, fixtures in FIXTURES.items():
-        for match_number, (home_team, away_team) in enumerate(fixtures, start=1):
-            current_match_id = match_id(round_number, match_number)
-            result = st.session_state.results[current_match_id]
-            if result["home_goals"] is None or result["away_goals"] is None:
-                pending.append((current_match_id, home_team, away_team))
-    return pending
 
 
 def bnei_yehuda_promoted_on_points_only(points_map: dict[str, int]) -> bool:
@@ -903,28 +241,8 @@ def estimate_bnei_yehuda_promotion_probability_from_results(
     }
 
 
-def unresolved_match_ids_for_team(team: str) -> list[str]:
-    pending_matches: list[str] = []
-    for round_number, matches in FIXTURES.items():
-        for match_number, (home_team, away_team) in enumerate(matches, start=1):
-            current_match_id = match_id(round_number, match_number)
-            result = st.session_state.results[current_match_id]
-            if result["home_goals"] is not None and result["away_goals"] is not None:
-                continue
-            if team in (home_team, away_team):
-                pending_matches.append(current_match_id)
-    return pending_matches
 
 
-def pending_matches() -> list[tuple[str, str, str]]:
-    matches: list[tuple[str, str, str]] = []
-    for round_number, fixtures in FIXTURES.items():
-        for match_number, (home_team, away_team) in enumerate(fixtures, start=1):
-            current_match_id = match_id(round_number, match_number)
-            result = st.session_state.results[current_match_id]
-            if result["home_goals"] is None or result["away_goals"] is None:
-                matches.append((current_match_id, home_team, away_team))
-    return matches
 
 
 def points_delta_for_result(result_code: str) -> tuple[int, int]:
@@ -1889,7 +1207,6 @@ def render_round_group(
 
 
 ensure_session_state()
-render_admin_panel()
 mobile_layout = is_mobile_client()
 st.session_state.layout_mode = "mobile" if mobile_layout else "desktop"
 send_ga4_page_view()
@@ -2358,6 +1675,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+render_admin_panel()
 button_col_left, button_col_right = st.columns(2)
 if mobile_layout:
     load_random_promotion = button_col_left.button("תרחיש עלייה אקראי", use_container_width=True)
