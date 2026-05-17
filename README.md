@@ -1,6 +1,6 @@
 # malamala | מעלהמעלה
 
-![Tests](https://github.com/RanKeydar/BYMM26/actions/workflows/tests.yml/badge.svg)
+[![Tests](https://github.com/RanKeydar/BYMM26/actions/workflows/tests.yml/badge.svg)](https://github.com/RanKeydar/BYMM26/actions/workflows/tests.yml)
 
 Hebrew RTL Streamlit app for simulating Bnei Yehuda promotion scenarios during the Israeli National League top playoff.
 
