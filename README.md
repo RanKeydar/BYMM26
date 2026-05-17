@@ -3,6 +3,7 @@
 Hebrew RTL Streamlit app for simulating Bnei Yehuda promotion scenarios during the Israeli National League top playoff.
 
 **Live demo:** https://malamala-by26.fly.dev/
+![malamala app screenshot](assets/screenshot.png)
 
 ## Overview
 
