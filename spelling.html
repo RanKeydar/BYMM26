@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#fffdf7" />
+    <title>איות בריינרוט</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="spelling.css" />
+  </head>
+  <body>
+    <header class="spelling-header">
+      <a class="icon-button" href="index.html" aria-label="חזרה למשחק" title="חזרה למשחק">‹</a>
+      <div class="header-copy">
+        <p>ארקייד בריינרוט משפחתי</p>
+        <h1>התליין: לומדים לאיית</h1>
+      </div>
+      <a class="coloring-shortcut" href="coloring.html">צביעה</a>
+    </header>
+
+    <main class="spelling-shell">
+      <section class="game-panel" aria-label="משחק איות">
+        <div class="prompt-strip">
+          <div>
+            <h2 id="hebrew-name">טרללרו טרללה</h2>
+            <div class="mode-row" role="group" aria-label="בחירת רמת איות">
+              <button id="mode-copy" class="mode-button" type="button" aria-pressed="true">העתקה</button>
+              <button id="mode-visual" class="mode-button" type="button" aria-pressed="false">כרטיסיה</button>
+              <button id="instructions-toggle" class="instructions-toggle" type="button" aria-label="הוראות" title="הוראות" aria-expanded="false">?</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="instructions-panel" class="instructions-panel" hidden>
+          <strong>הסבר קצר להורים</strong>
+          <p>במצב העתקה המילה כתובה והילד בוחר את האותיות שלה. במצב כרטיסיה מוצג רק רמז ויזואלי לרכיב, והילד צריך לאיית את המילה מהזיכרון.</p>
+        </div>
+
+        <div id="reward-stage" class="reward-stage" aria-live="polite">
+          <div class="character-orbit">
+            <img id="reward-avatar" class="reward-avatar-base" src="assets/characters/tralalero.png" alt="" />
+            <img id="reward-avatar-color" class="reward-avatar-color" src="assets/characters/tralalero.png" alt="" />
+            <div id="component-effects" class="component-effects" aria-hidden="true"></div>
+            <div id="reward-burst" class="reward-burst"></div>
+          </div>
+          <div class="component-stack">
+            <p class="eyebrow">רכיבים שנאספו</p>
+            <div id="component-track" class="component-track"></div>
+          </div>
+        </div>
+
+        <div id="final-ceremony" class="final-ceremony" hidden>
+          <div id="final-confetti" class="final-confetti" aria-hidden="true"></div>
+          <div class="final-copy-block">
+            <p class="eyebrow">כל הרכיבים הושלמו</p>
+            <h2 id="final-title">מופע מיוחד נפתח</h2>
+            <p id="final-copy">הדמות עושה עכשיו פעולה מיוחדת.</p>
+          </div>
+          <div id="final-showcase" class="final-showcase" aria-hidden="true">
+            <div class="final-spotlight"></div>
+            <img id="final-avatar" src="assets/characters/tralalero.png" alt="" />
+            <strong id="final-action-label">פעולה מיוחדת</strong>
+          </div>
+          <div id="final-components" class="final-components"></div>
+        </div>
+
+        <div class="play-row">
+          <div class="word-area">
+            <div id="target-card" class="target-card">
+              <div id="target-visual" class="target-visual" aria-hidden="true">🦈</div>
+              <strong id="target-word">כריש</strong>
+            </div>
+            <div id="masked-word" class="masked-word" dir="rtl" aria-live="polite"></div>
+            <p id="game-status" class="game-status" aria-live="polite"></p>
+            <div class="score-row" aria-label="ניקוד">
+              <span id="mistake-count">טעויות 0/6</span>
+              <span id="win-count">הצלחות 0</span>
+              <span id="loss-count">פסילות 0</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="action-row">
+          <button id="next-button" class="primary-action" type="button">למילה הבאה</button>
+          <button id="retry-button" type="button">ניסיון נוסף</button>
+        </div>
+
+        <div id="letter-grid" class="letter-grid" dir="rtl" aria-label="בחירת אותיות בעברית"></div>
+
+        <div class="mistake-panel" role="img" aria-label="מד טעויות">
+          <span class="mistake-icon" aria-hidden="true">⚡</span>
+          <strong id="mistake-title">אנרגיית ניסיון</strong>
+          <div class="mistake-track" aria-hidden="true">
+            <i class="mistake-piece"></i>
+            <i class="mistake-piece"></i>
+            <i class="mistake-piece"></i>
+            <i class="mistake-piece"></i>
+            <i class="mistake-piece"></i>
+            <i class="mistake-piece"></i>
+          </div>
+          <small id="mistake-copy">כל טעות מורידה פס אנרגיה.</small>
+        </div>
+      </section>
+
+      <section class="character-panel" aria-label="בחירת דמות לאיות">
+        <p class="eyebrow">בחר דמות</p>
+        <div id="spelling-character-list" class="spelling-character-list"></div>
+      </section>
+    </main>
+
+    <div id="final-screen" class="final-screen" hidden aria-live="polite">
+      <div id="final-screen-confetti" class="final-confetti final-screen-confetti" aria-hidden="true"></div>
+      <div class="final-screen-light" aria-hidden="true"></div>
+      <div class="final-screen-track" aria-hidden="true"></div>
+      <div class="final-scene final-wave" aria-hidden="true"><span></span><span></span><span></span></div>
+      <div class="final-scene final-bombs" aria-hidden="true"><span>💣</span><span>💥</span><span>💣</span></div>
+      <div class="final-scene final-ballet" aria-hidden="true"><span>✦</span><span>✧</span><span>✦</span></div>
+      <div class="final-scene final-sticks" aria-hidden="true"><span></span><span></span><span>🥁</span></div>
+      <div class="final-scene final-branches" aria-hidden="true"><span></span><span></span><span>🍌</span></div>
+      <div class="final-scene final-dust" aria-hidden="true"><span></span><span></span><span></span></div>
+      <div class="final-scene final-trunk" aria-hidden="true"><span>💦</span><span>💧</span><span>💦</span></div>
+      <div class="final-scene final-rails" aria-hidden="true"><span></span><span></span><span></span></div>
+      <img id="final-screen-avatar" src="assets/characters/tralalero.png" alt="" />
+      <div class="final-screen-copy">
+        <p class="eyebrow">מופע ניצחון</p>
+        <strong id="final-screen-title">הדמות עושה פעולה מיוחדת</strong>
+        <span id="final-screen-action">פעולה מיוחדת</span>
+      </div>
+      <button id="final-screen-close" class="final-screen-close" type="button">חזרה למשחק</button>
+    </div>
+
+    <script src="src/spelling.js"></script>
+  </body>
+</html>

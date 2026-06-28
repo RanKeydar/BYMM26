@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#fffdf7" />
+    <title>דפי צביעה בריינרוט</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="coloring.css" />
+  </head>
+  <body>
+    <header class="coloring-header">
+      <a class="icon-button back-button" href="index.html" aria-label="חזרה למשחק" title="חזרה למשחק">‹</a>
+      <div class="header-copy">
+        <p>ארקייד בריינרוט משפחתי</p>
+        <h1 id="page-title">Tralalero Tralala</h1>
+      </div>
+      <a class="spelling-shortcut" href="spelling.html">איות</a>
+    </header>
+
+    <main class="coloring-app">
+      <section class="character-picker" aria-label="בחירת דף צביעה">
+        <div id="character-strip" class="character-strip"></div>
+      </section>
+
+      <section class="workbench">
+        <div class="canvas-column">
+          <div class="canvas-frame">
+            <div id="canvas-toolbar" class="canvas-toolbar" aria-label="כלי תצוגה וביטול">
+              <div class="zoom-controls" aria-label="זום">
+                <button id="zoom-out-button" class="canvas-tool icon-tool" type="button" aria-label="הקטנה" title="הקטנה">−</button>
+                <output id="zoom-value" class="zoom-value" aria-live="polite">100%</output>
+                <button id="zoom-in-button" class="canvas-tool icon-tool" type="button" aria-label="הגדלה" title="הגדלה">+</button>
+                <button id="zoom-reset-button" class="canvas-tool icon-tool fit-tool" type="button" aria-label="התאמה למסך" title="התאמה למסך">▣</button>
+              </div>
+            </div>
+            <div id="canvas-surface" class="canvas-surface">
+              <canvas id="coloring-canvas" width="720" height="960" aria-label="דף צביעה אינטראקטיבי"></canvas>
+              <div id="loading-state" class="loading-state">טוען דף צביעה…</div>
+            </div>
+          </div>
+          <p id="status-message" class="status-message" aria-live="polite">בחר צבע וגע בתוך שטח</p>
+        </div>
+
+        <aside class="tool-panel" aria-label="כלי צביעה">
+          <button id="undo-button" class="tool-button undo-tool" type="button" title="ביטול (Ctrl+Z)" disabled>
+            <span aria-hidden="true">↶</span>
+            <span>ביטול <kbd>Ctrl Z</kbd></span>
+          </button>
+          <button id="reset-button" class="tool-button" type="button">
+            <span aria-hidden="true">↺</span>
+            איפוס
+          </button>
+          <button id="save-button" class="tool-button primary-tool" type="button">
+            <span aria-hidden="true">↓</span>
+            שמירה
+          </button>
+        </aside>
+      </section>
+    </main>
+
+    <nav class="palette-dock" aria-label="פלטת צבעים">
+      <div id="palette" class="palette"></div>
+    </nav>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="src/coloring.js"></script>
+  </body>
+</html>

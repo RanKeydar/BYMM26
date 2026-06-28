@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ארקייד בריינרוט משפחתי</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">אב טיפוס משפחתי פרטי</p>
+          <h1>ארקייד בריינרוט משפחתי</h1>
+        </div>
+        <nav class="mode-tabs" aria-label="מצבי משחק">
+          <button class="mode-button active" data-mode="menu">בית</button>
+          <button class="mode-button" data-mode="runner">מירוץ</button>
+          <button class="mode-button" data-mode="cliff">תהום</button>
+          <button class="mode-button" data-mode="lab">מעבדת ממים</button>
+          <button class="mode-button" data-mode="battle">קרב</button>
+          <a class="mode-button coloring-link" href="coloring.html">צביעה</a>
+          <a class="mode-button spelling-link" href="spelling.html">איות</a>
+        </nav>
+      </header>
+
+      <section class="game-layout">
+        <section id="mode-panel" class="mode-panel">
+          <h2 id="mode-title">בית</h2>
+          <p id="mode-copy">בחר מירוץ, אתגר תהום, מעבדת ממים או קרב כדי להתחיל.</p>
+          <button id="primary-action" class="primary-action">התחל מירוץ</button>
+          <div id="level-tools" class="level-tools">
+            <p class="eyebrow">רמת מירוץ</p>
+            <div class="level-buttons" aria-label="בחירת רמת מירוץ">
+              <button type="button" class="level-button active" data-level="stage1">שלב 1</button>
+              <button type="button" class="level-button" data-level="stage2">שלב 2</button>
+              <button type="button" class="level-button" data-level="stage3">שלב 3</button>
+              <button type="button" class="level-button" data-level="stage4">שלב 4</button>
+              <button type="button" class="level-button" data-level="stage5">שלב 5</button>
+              <button type="button" class="level-button" data-level="stage6">שלב 6</button>
+              <button type="button" class="level-button" data-level="stage7">שלב 7</button>
+              <button type="button" class="level-button" data-level="stage8">שלב 8</button>
+              <button type="button" class="level-button" data-level="stage9">שלב 9</button>
+              <button type="button" class="level-button" data-level="stage10">שלב 10</button>
+            </div>
+          </div>
+          <div id="lab-tools" class="lab-tools" hidden>
+            <button id="mix-button">ערבב בריינרוט חדש</button>
+            <ol id="lab-history"></ol>
+          </div>
+        </section>
+
+        <div class="playfield-wrap">
+          <div id="game-root" aria-label="מסך משחק בריינרוט"></div>
+          <div class="hud-strip" aria-live="polite">
+            <span id="hud-mode">בית</span>
+            <span id="hud-score">ניקוד 0</span>
+            <span id="hud-lives">חיים 3</span>
+            <span id="hud-status">בחר מצב</span>
+          </div>
+          <div class="touch-controls" aria-label="כפתורי שליטה">
+            <button data-action="left">שמאלה</button>
+            <button data-action="right">ימינה</button>
+            <button data-action="jump">קפיצה</button>
+            <button data-action="duck">התכופף</button>
+            <button data-action="attack">יכולת</button>
+            <button data-action="special" hidden>יכולת</button>
+            <button data-action="dodge" hidden>התחמקות</button>
+          </div>
+        </div>
+
+        <aside class="side-panel">
+          <section>
+            <h2 id="panel-title">בחר דמות</h2>
+            <div id="character-list" class="character-list"></div>
+          </section>
+
+          <section class="selected-card">
+            <p class="eyebrow">נבחרה</p>
+            <h3 id="selected-name">Tralalero Tralala</h3>
+            <p id="selected-tagline">כריש עם שלוש נעלי NIKE במצב ספרינט.</p>
+            <dl class="stats-list">
+              <div><dt>מהירות</dt><dd id="stat-speed">1.25</dd></div>
+              <div><dt>קפיצה</dt><dd id="stat-jump">1.08</dd></div>
+              <div><dt>כוח</dt><dd id="stat-power">0.85</dd></div>
+            </dl>
+            <div class="ability-note">
+              <p class="eyebrow">יכולת</p>
+              <strong id="ability-name">ספרינט NIKE משולש</strong>
+              <span id="ability-copy">פרץ מהיר עם נעלי NIKE.</span>
+            </div>
+          </section>
+
+        </aside>
+      </section>
+    </main>
+
+    <script src="vendor/phaser.min.js"></script>
+    <script src="src/main.js"></script>
+  </body>
+</html>
