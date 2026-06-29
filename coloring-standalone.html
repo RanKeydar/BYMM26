@@ -989,20 +989,79 @@ function drawMaskPath(mask, points, thickness = 3) {
   }
 }
 
+function drawInkLine(imageData, x1, y1, x2, y2, thickness = 3) {
+  const { width, height, data } = imageData;
+  const steps = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
+  const radius = Math.max(1, Math.floor(thickness / 2));
+  for (let step = 0; step <= steps; step += 1) {
+    const progress = steps ? step / steps : 0;
+    const x = Math.round(x1 + (x2 - x1) * progress);
+    const y = Math.round(y1 + (y2 - y1) * progress);
+    for (let offsetY = -radius; offsetY <= radius; offsetY += 1) {
+      for (let offsetX = -radius; offsetX <= radius; offsetX += 1) {
+        const nextX = x + offsetX;
+        const nextY = y + offsetY;
+        if (nextX < 0 || nextX >= width || nextY < 0 || nextY >= height) continue;
+        const offset = (nextY * width + nextX) * 4;
+        data[offset] = 18;
+        data[offset + 1] = 18;
+        data[offset + 2] = 18;
+        data[offset + 3] = 255;
+      }
+    }
+  }
+}
+
+function drawInkPath(imageData, points, thickness = 3) {
+  for (let index = 1; index < points.length; index += 1) {
+    const [x1, y1] = points[index - 1];
+    const [x2, y2] = points[index];
+    drawInkLine(imageData, x1, y1, x2, y2, thickness);
+  }
+}
+
+function drawPageBoundaryGuides(imageData, pageId) {
+  if (pageId === "tralalero") {
+    drawInkPath(imageData, [[0, 514], [55, 512], [112, 513], [150, 512]], 3);
+    drawInkPath(imageData, [[592, 514], [650, 512], [720, 511]], 3);
+    drawInkPath(imageData, [[0, 584], [78, 585], [150, 582]], 3);
+    drawInkPath(imageData, [[555, 588], [638, 584], [720, 585]], 3);
+  }
+}
+
 function createVirtualBarriers(pageId) {
   const mask = new Uint8Array(canvas.width * canvas.height);
-  if (pageId === "tralalero") {
+  if (pageId === "trenostruzzo-original") {
     drawMaskPath(mask, [
-      [0, 575],
-      [70, 585],
-      [145, 574],
-      [220, 590],
-      [300, 578],
-      [380, 592],
-      [470, 580],
-      [565, 592],
-      [645, 578],
-      [720, 586],
+      [45, 38],
+      [62, 25],
+      [95, 19],
+      [126, 28],
+      [156, 21],
+      [190, 23],
+      [225, 18],
+      [260, 23],
+      [296, 22],
+      [332, 28],
+      [366, 29],
+      [402, 36],
+      [432, 39],
+      [466, 52],
+      [494, 69],
+      [518, 88],
+      [535, 112],
+      [520, 118],
+      [478, 104],
+      [430, 94],
+      [376, 94],
+      [324, 88],
+      [278, 82],
+      [232, 88],
+      [188, 84],
+      [142, 92],
+      [98, 88],
+      [55, 96],
+      [45, 38],
     ], 3);
   }
   return mask;
@@ -1084,129 +1143,37 @@ function buildRegions(mask) {
   return { labels, sizes };
 }
 
-function sampleLabel(labels, x, y) {
+function regionAt(labels, x, y) {
   const safeX = Math.max(0, Math.min(canvas.width - 1, Math.round(x)));
   const safeY = Math.max(0, Math.min(canvas.height - 1, Math.round(y)));
   return labels[safeY * canvas.width + safeX];
 }
 
-function nextRegionId(sizes) {
-  sizes.push(0);
-  return sizes.length - 1;
-}
-
-function pointInPolygon(x, y, polygon) {
-  let inside = false;
-  for (let current = 0, previous = polygon.length - 1; current < polygon.length; previous = current, current += 1) {
-    const [currentX, currentY] = polygon[current];
-    const [previousX, previousY] = polygon[previous];
-    const intersects = ((currentY > y) !== (previousY > y))
-      && (x < (previousX - currentX) * (y - currentY) / (previousY - currentY) + currentX);
-    if (intersects) inside = !inside;
-  }
-  return inside;
-}
-
-function pointInAnyPolygon(x, y, polygons) {
-  return polygons.some((polygon) => pointInPolygon(x, y, polygon));
-}
-
-function assignPolygonRegion(labels, sizes, predicate) {
-  const id = nextRegionId(sizes);
-  let count = 0;
+function mergeRegionIds(labels, sizes, regionIds) {
+  const uniqueIds = [...new Set(regionIds.filter((id) => id && sizes[id] >= 12))];
+  if (uniqueIds.length < 2) return;
+  const mergedId = uniqueIds[0];
+  const mergedSet = new Set(uniqueIds.slice(1));
+  let mergedSize = sizes[mergedId];
   for (let index = 0; index < labels.length; index += 1) {
-    if (!labels[index]) continue;
-    const x = index % canvas.width;
-    const y = Math.floor(index / canvas.width);
-    if (!predicate(x, y)) continue;
-    labels[index] = id;
-    count += 1;
+    if (!mergedSet.has(labels[index])) continue;
+    mergedSize += 1;
+    labels[index] = mergedId;
   }
-  sizes[id] = count;
-  return id;
+  sizes[mergedId] = mergedSize;
+  uniqueIds.slice(1).forEach((id) => {
+    sizes[id] = 0;
+  });
 }
 
-function tralaleroSeaLine(x) {
-  return 512 + Math.round(Math.sin(x / 55) * 8);
-}
-
-function tralaleroSandLine(x) {
-  const progress = x / Math.max(1, canvas.width - 1);
-  return 605 - Math.round(progress * 18) + Math.round(Math.sin(x / 70) * 5);
-}
-
-function applyTralaleroRegions(labels, sizes) {
-  const originalLabels = labels.slice();
-  const backgroundLabel = sampleLabel(originalLabels, 20, 20);
-  const cliffPolygon = [
-    [470, 505],
-    [520, 405],
-    [550, 260],
-    [585, 170],
-    [620, 130],
-    [685, 210],
-    [720, 245],
-    [720, 552],
-    [660, 535],
-    [610, 510],
-    [555, 520],
-  ];
-
-  assignPolygonRegion(labels, sizes, (x, y) => (
-    originalLabels[y * canvas.width + x]
-    && pointInPolygon(x, y, cliffPolygon)
-  ));
-  assignPolygonRegion(labels, sizes, (x, y) => (
-    originalLabels[y * canvas.width + x] === backgroundLabel
-    && !pointInPolygon(x, y, cliffPolygon)
-    && y < tralaleroSeaLine(x)
-  ));
-  assignPolygonRegion(labels, sizes, (x, y) => (
-    originalLabels[y * canvas.width + x] === backgroundLabel
-    && !pointInPolygon(x, y, cliffPolygon)
-    && y >= tralaleroSeaLine(x)
-    && y < tralaleroSandLine(x)
-  ));
-  assignPolygonRegion(labels, sizes, (x, y) => (
-    originalLabels[y * canvas.width + x] === backgroundLabel
-    && y >= tralaleroSandLine(x)
-  ));
-}
-
-function isTrenostruzzoSmoke(x, y) {
-  if (x < 55 || x > 515 || y < 14 || y > 140) return false;
-  const chimneyLift = Math.max(0, (x - 300) / 215) * 34;
-  const lowerEdge = 96 + chimneyLift + Math.sin(x / 44) * 8;
-  const upperEdge = 24 + Math.sin(x / 58) * 7;
-  return y >= upperEdge && y <= lowerEdge;
-}
-
-function applyTrenostruzzoOriginalRegions(labels, sizes) {
-  const originalLabels = labels.slice();
-  const backgroundLabel = sampleLabel(originalLabels, 25, 65);
-
-  assignPolygonRegion(labels, sizes, (x, y) => (
-    originalLabels[y * canvas.width + x] === backgroundLabel
-    && isTrenostruzzoSmoke(x, y)
-  ));
-  assignPolygonRegion(labels, sizes, (x, y) => (
-    originalLabels[y * canvas.width + x] === backgroundLabel
-    &&
-    y < 390
-    && !isTrenostruzzoSmoke(x, y)
-  ));
-  assignPolygonRegion(labels, sizes, (x, y) => (
-    originalLabels[y * canvas.width + x] === backgroundLabel
-    && y >= 390
-  ));
-}
-
-function applyPageRegionOverrides(pageId, labels, sizes) {
-  if (pageId === "tralalero") {
-    applyTralaleroRegions(labels, sizes);
-  } else if (pageId === "trenostruzzo-original") {
-    applyTrenostruzzoOriginalRegions(labels, sizes);
-  }
+function applyLineArtRegionMerges(pageId, labels, sizes) {
+  if (pageId !== "trenostruzzo-original") return;
+  mergeRegionIds(labels, sizes, [
+    regionAt(labels, 80, 80),
+    regionAt(labels, 130, 70),
+    regionAt(labels, 260, 70),
+    regionAt(labels, 500, 105),
+  ]);
 }
 
 function updateUndoButton() {
@@ -1217,6 +1184,7 @@ function preparePageRegions() {
   const page = PAGES[currentPageIndex];
   const sourceImageData = context.getImageData(0, 0, canvas.width, canvas.height);
   if (page.id !== "tralalero") removeNumberLabels(sourceImageData);
+  drawPageBoundaryGuides(sourceImageData, page.id);
   const visibleLineMask = strengthenLineMask(createLineMask(sourceImageData));
   virtualBarrierMask = createVirtualBarriers(page.id);
   lineMask = mergeMasks(visibleLineMask, virtualBarrierMask);
@@ -1226,7 +1194,7 @@ function preparePageRegions() {
   workingImageData = cloneImageData(sourceImageData);
   const regions = buildRegions(lineMask);
   attachVirtualBarriersToRegions(regions.labels, virtualBarrierMask);
-  applyPageRegionOverrides(page.id, regions.labels, regions.sizes);
+  applyLineArtRegionMerges(page.id, regions.labels, regions.sizes);
   regionMap = regions.labels;
   regionSizes = regions.sizes;
   regionColors = new Map();
@@ -1353,32 +1321,6 @@ function applyRegionColor(regionId, color, recordHistory = true) {
       workingImageData.data[offset + 1] = baseImageData.data[offset + 1];
       workingImageData.data[offset + 2] = baseImageData.data[offset + 2];
       workingImageData.data[offset + 3] = baseImageData.data[offset + 3];
-    }
-  }
-  if (virtualBarrierMask) {
-    const width = canvas.width;
-    for (let index = 0; index < virtualBarrierMask.length; index += 1) {
-      if (!virtualBarrierMask[index]) continue;
-      const x = index % width;
-      const touchesRegion = (
-        (index >= width && regionMap[index - width] === regionId)
-        || (index + width < regionMap.length && regionMap[index + width] === regionId)
-        || (x > 0 && regionMap[index - 1] === regionId)
-        || (x < width - 1 && regionMap[index + 1] === regionId)
-      );
-      if (!touchesRegion) continue;
-      const offset = index * 4;
-      if (fill) {
-        workingImageData.data[offset] = fill[0];
-        workingImageData.data[offset + 1] = fill[1];
-        workingImageData.data[offset + 2] = fill[2];
-        workingImageData.data[offset + 3] = 255;
-      } else {
-        workingImageData.data[offset] = baseImageData.data[offset];
-        workingImageData.data[offset + 1] = baseImageData.data[offset + 1];
-        workingImageData.data[offset + 2] = baseImageData.data[offset + 2];
-        workingImageData.data[offset + 3] = baseImageData.data[offset + 3];
-      }
     }
   }
   context.putImageData(workingImageData, 0, 0);

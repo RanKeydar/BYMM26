@@ -168,6 +168,11 @@ assert.deepEqual(
 await page.keyboard.press("Control+z");
 await swatches.nth(2).click();
 await clickCanvasPixel(canvas, trenoSmokePoint.x, trenoSmokePoint.y);
+assert.notDeepEqual(
+  await canvasPixel(canvas, trenoSmokePoint.x, trenoSmokePoint.y),
+  trenoSmokePixel,
+  "the original Trenostruzzo smoke should be directly colorable",
+);
 assert.deepEqual(
   await canvasPixel(canvas, trenoSkyPoint.x, trenoSkyPoint.y),
   trenoSkyPixel,
