@@ -89,7 +89,7 @@ assert.equal(await undoButton.isDisabled(), true);
 const beachPoint = { x: 420, y: 760 };
 const sharkPoint = { x: 325, y: 430 };
 const skyPoint = { x: 28, y: 70 };
-const secondBeachPoint = { x: 635, y: 815 };
+const secondBeachPoint = { x: 640, y: 900 };
 const beachPixel = await canvasPixel(canvas, beachPoint.x, beachPoint.y);
 const secondBeachPixel = await canvasPixel(canvas, secondBeachPoint.x, secondBeachPoint.y);
 const sharkPixel = await canvasPixel(canvas, sharkPoint.x, sharkPoint.y);
@@ -155,7 +155,8 @@ assert.equal(new Set(loadedTitles).size, 9);
 await characterButtons.nth(8).click();
 await page.locator("#loading-state").waitFor({ state: "hidden" });
 const trenoSkyPoint = { x: 25, y: 65 };
-const trenoSmokePoint = { x: 300, y: 66 };
+const trenoSmokePoint = { x: 260, y: 70 };
+const trenoSkyPixel = await canvasPixel(canvas, trenoSkyPoint.x, trenoSkyPoint.y);
 const trenoSmokePixel = await canvasPixel(canvas, trenoSmokePoint.x, trenoSmokePoint.y);
 await swatches.nth(0).click();
 await clickCanvasPixel(canvas, trenoSkyPoint.x, trenoSkyPoint.y);
@@ -163,6 +164,14 @@ assert.deepEqual(
   await canvasPixel(canvas, trenoSmokePoint.x, trenoSmokePoint.y),
   trenoSmokePixel,
   "the original Trenostruzzo smoke should not be colored with the sky",
+);
+await page.keyboard.press("Control+z");
+await swatches.nth(2).click();
+await clickCanvasPixel(canvas, trenoSmokePoint.x, trenoSmokePoint.y);
+assert.deepEqual(
+  await canvasPixel(canvas, trenoSkyPoint.x, trenoSkyPoint.y),
+  trenoSkyPixel,
+  "the original Trenostruzzo sky should not be colored with the smoke",
 );
 await page.keyboard.press("Control+z");
 

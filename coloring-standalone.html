@@ -1095,16 +1095,30 @@ function nextRegionId(sizes) {
   return sizes.length - 1;
 }
 
-function assignSemanticRegion(labels, sizes, sourceLabels, predicate) {
-  const width = canvas.width;
+function pointInPolygon(x, y, polygon) {
+  let inside = false;
+  for (let current = 0, previous = polygon.length - 1; current < polygon.length; previous = current, current += 1) {
+    const [currentX, currentY] = polygon[current];
+    const [previousX, previousY] = polygon[previous];
+    const intersects = ((currentY > y) !== (previousY > y))
+      && (x < (previousX - currentX) * (y - currentY) / (previousY - currentY) + currentX);
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function pointInAnyPolygon(x, y, polygons) {
+  return polygons.some((polygon) => pointInPolygon(x, y, polygon));
+}
+
+function assignPolygonRegion(labels, sizes, predicate) {
   const id = nextRegionId(sizes);
   let count = 0;
   for (let index = 0; index < labels.length; index += 1) {
-    const source = labels[index];
-    if (!source || !sourceLabels.has(source)) continue;
-    const x = index % width;
-    const y = Math.floor(index / width);
-    if (!predicate(x, y, source)) continue;
+    if (!labels[index]) continue;
+    const x = index % canvas.width;
+    const y = Math.floor(index / canvas.width);
+    if (!predicate(x, y)) continue;
     labels[index] = id;
     count += 1;
   }
@@ -1124,50 +1138,39 @@ function tralaleroSandLine(x) {
 function applyTralaleroRegions(labels, sizes) {
   const originalLabels = labels.slice();
   const backgroundLabel = sampleLabel(originalLabels, 20, 20);
-  const protectedLabels = new Set([
-    sampleLabel(originalLabels, 325, 430),
-    sampleLabel(originalLabels, 190, 500),
-    sampleLabel(originalLabels, 470, 455),
-    sampleLabel(originalLabels, 565, 515),
-    sampleLabel(originalLabels, 260, 625),
-    sampleLabel(originalLabels, 455, 612),
-    sampleLabel(originalLabels, 205, 660),
-    sampleLabel(originalLabels, 355, 654),
-    sampleLabel(originalLabels, 545, 640),
-    sampleLabel(originalLabels, 105, 818),
-    sampleLabel(originalLabels, 220, 850),
-    sampleLabel(originalLabels, 410, 840),
-    sampleLabel(originalLabels, 525, 825),
-    sampleLabel(originalLabels, 625, 735),
-  ].filter((label) => label && label !== backgroundLabel));
+  const cliffPolygon = [
+    [470, 505],
+    [520, 405],
+    [550, 260],
+    [585, 170],
+    [620, 130],
+    [685, 210],
+    [720, 245],
+    [720, 552],
+    [660, 535],
+    [610, 510],
+    [555, 520],
+  ];
 
-  const skyId = nextRegionId(sizes);
-  const seaId = nextRegionId(sizes);
-  const sandId = nextRegionId(sizes);
-  let skyCount = 0;
-  let seaCount = 0;
-  let sandCount = 0;
-
-  for (let index = 0; index < labels.length; index += 1) {
-    const source = originalLabels[index];
-    if (!source || protectedLabels.has(source)) continue;
-    const x = index % canvas.width;
-    const y = Math.floor(index / canvas.width);
-    if (y >= tralaleroSandLine(x)) {
-      labels[index] = sandId;
-      sandCount += 1;
-    } else if (y >= tralaleroSeaLine(x)) {
-      labels[index] = seaId;
-      seaCount += 1;
-    } else {
-      labels[index] = skyId;
-      skyCount += 1;
-    }
-  }
-
-  sizes[skyId] = skyCount;
-  sizes[seaId] = seaCount;
-  sizes[sandId] = sandCount;
+  assignPolygonRegion(labels, sizes, (x, y) => (
+    originalLabels[y * canvas.width + x]
+    && pointInPolygon(x, y, cliffPolygon)
+  ));
+  assignPolygonRegion(labels, sizes, (x, y) => (
+    originalLabels[y * canvas.width + x] === backgroundLabel
+    && !pointInPolygon(x, y, cliffPolygon)
+    && y < tralaleroSeaLine(x)
+  ));
+  assignPolygonRegion(labels, sizes, (x, y) => (
+    originalLabels[y * canvas.width + x] === backgroundLabel
+    && !pointInPolygon(x, y, cliffPolygon)
+    && y >= tralaleroSeaLine(x)
+    && y < tralaleroSandLine(x)
+  ));
+  assignPolygonRegion(labels, sizes, (x, y) => (
+    originalLabels[y * canvas.width + x] === backgroundLabel
+    && y >= tralaleroSandLine(x)
+  ));
 }
 
 function isTrenostruzzoSmoke(x, y) {
@@ -1180,39 +1183,22 @@ function isTrenostruzzoSmoke(x, y) {
 
 function applyTrenostruzzoOriginalRegions(labels, sizes) {
   const originalLabels = labels.slice();
-  const backgroundLabel = sampleLabel(originalLabels, 28, 30);
-  const protectedLabels = new Set([
-    sampleLabel(originalLabels, 160, 250),
-    sampleLabel(originalLabels, 230, 355),
-    sampleLabel(originalLabels, 145, 505),
-    sampleLabel(originalLabels, 285, 505),
-    sampleLabel(originalLabels, 465, 360),
-    sampleLabel(originalLabels, 545, 245),
-    sampleLabel(originalLabels, 455, 680),
-    sampleLabel(originalLabels, 555, 680),
-  ].filter((label) => label && label !== backgroundLabel));
+  const backgroundLabel = sampleLabel(originalLabels, 25, 65);
 
-  const skyId = nextRegionId(sizes);
-  const smokeId = nextRegionId(sizes);
-  let skyCount = 0;
-  let smokeCount = 0;
-
-  for (let index = 0; index < labels.length; index += 1) {
-    const source = originalLabels[index];
-    if (!source || protectedLabels.has(source)) continue;
-    const x = index % canvas.width;
-    const y = Math.floor(index / canvas.width);
-    if (isTrenostruzzoSmoke(x, y)) {
-      labels[index] = smokeId;
-      smokeCount += 1;
-    } else if (y < 380) {
-      labels[index] = skyId;
-      skyCount += 1;
-    }
-  }
-
-  sizes[skyId] = skyCount;
-  sizes[smokeId] = smokeCount;
+  assignPolygonRegion(labels, sizes, (x, y) => (
+    originalLabels[y * canvas.width + x] === backgroundLabel
+    && isTrenostruzzoSmoke(x, y)
+  ));
+  assignPolygonRegion(labels, sizes, (x, y) => (
+    originalLabels[y * canvas.width + x] === backgroundLabel
+    &&
+    y < 390
+    && !isTrenostruzzoSmoke(x, y)
+  ));
+  assignPolygonRegion(labels, sizes, (x, y) => (
+    originalLabels[y * canvas.width + x] === backgroundLabel
+    && y >= 390
+  ));
 }
 
 function applyPageRegionOverrides(pageId, labels, sizes) {
@@ -1297,6 +1283,8 @@ function findNearestRegion(startX, startY, radius) {
     return { regionId: directRegion, snapped: false };
   }
 
+  let nearestRegion = 0;
+  let nearestDistance = Infinity;
   for (let distance = 1; distance <= radius; distance += 1) {
     const minX = Math.max(0, startX - distance);
     const maxX = Math.min(width - 1, startX + distance);
@@ -1305,16 +1293,33 @@ function findNearestRegion(startX, startY, radius) {
 
     for (let x = minX; x <= maxX; x += 1) {
       const topRegion = regionMap[minY * width + x];
-      if (topRegion && regionSizes[topRegion] >= 12) return { regionId: topRegion, snapped: true };
+      const topDistance = (x - startX) ** 2 + (minY - startY) ** 2;
+      if (topRegion && regionSizes[topRegion] >= 12 && topDistance < nearestDistance) {
+        nearestRegion = topRegion;
+        nearestDistance = topDistance;
+      }
       const bottomRegion = regionMap[maxY * width + x];
-      if (bottomRegion && regionSizes[bottomRegion] >= 12) return { regionId: bottomRegion, snapped: true };
+      const bottomDistance = (x - startX) ** 2 + (maxY - startY) ** 2;
+      if (bottomRegion && regionSizes[bottomRegion] >= 12 && bottomDistance < nearestDistance) {
+        nearestRegion = bottomRegion;
+        nearestDistance = bottomDistance;
+      }
     }
     for (let y = minY + 1; y < maxY; y += 1) {
       const leftRegion = regionMap[y * width + minX];
-      if (leftRegion && regionSizes[leftRegion] >= 12) return { regionId: leftRegion, snapped: true };
+      const leftDistance = (minX - startX) ** 2 + (y - startY) ** 2;
+      if (leftRegion && regionSizes[leftRegion] >= 12 && leftDistance < nearestDistance) {
+        nearestRegion = leftRegion;
+        nearestDistance = leftDistance;
+      }
       const rightRegion = regionMap[y * width + maxX];
-      if (rightRegion && regionSizes[rightRegion] >= 12) return { regionId: rightRegion, snapped: true };
+      const rightDistance = (maxX - startX) ** 2 + (y - startY) ** 2;
+      if (rightRegion && regionSizes[rightRegion] >= 12 && rightDistance < nearestDistance) {
+        nearestRegion = rightRegion;
+        nearestDistance = rightDistance;
+      }
     }
+    if (nearestRegion) return { regionId: nearestRegion, snapped: true };
   }
   return null;
 }
