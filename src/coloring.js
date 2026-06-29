@@ -445,6 +445,145 @@ function buildRegions(mask) {
   return { labels, sizes };
 }
 
+function sampleLabel(labels, x, y) {
+  const safeX = Math.max(0, Math.min(canvas.width - 1, Math.round(x)));
+  const safeY = Math.max(0, Math.min(canvas.height - 1, Math.round(y)));
+  return labels[safeY * canvas.width + safeX];
+}
+
+function nextRegionId(sizes) {
+  sizes.push(0);
+  return sizes.length - 1;
+}
+
+function assignSemanticRegion(labels, sizes, sourceLabels, predicate) {
+  const width = canvas.width;
+  const id = nextRegionId(sizes);
+  let count = 0;
+  for (let index = 0; index < labels.length; index += 1) {
+    const source = labels[index];
+    if (!source || !sourceLabels.has(source)) continue;
+    const x = index % width;
+    const y = Math.floor(index / width);
+    if (!predicate(x, y, source)) continue;
+    labels[index] = id;
+    count += 1;
+  }
+  sizes[id] = count;
+  return id;
+}
+
+function tralaleroSeaLine(x) {
+  return 512 + Math.round(Math.sin(x / 55) * 8);
+}
+
+function tralaleroSandLine(x) {
+  const progress = x / Math.max(1, canvas.width - 1);
+  return 605 - Math.round(progress * 18) + Math.round(Math.sin(x / 70) * 5);
+}
+
+function applyTralaleroRegions(labels, sizes) {
+  const originalLabels = labels.slice();
+  const backgroundLabel = sampleLabel(originalLabels, 20, 20);
+  const protectedLabels = new Set([
+    sampleLabel(originalLabels, 325, 430),
+    sampleLabel(originalLabels, 190, 500),
+    sampleLabel(originalLabels, 470, 455),
+    sampleLabel(originalLabels, 565, 515),
+    sampleLabel(originalLabels, 260, 625),
+    sampleLabel(originalLabels, 455, 612),
+    sampleLabel(originalLabels, 205, 660),
+    sampleLabel(originalLabels, 355, 654),
+    sampleLabel(originalLabels, 545, 640),
+    sampleLabel(originalLabels, 105, 818),
+    sampleLabel(originalLabels, 220, 850),
+    sampleLabel(originalLabels, 410, 840),
+    sampleLabel(originalLabels, 525, 825),
+    sampleLabel(originalLabels, 625, 735),
+  ].filter((label) => label && label !== backgroundLabel));
+
+  const skyId = nextRegionId(sizes);
+  const seaId = nextRegionId(sizes);
+  const sandId = nextRegionId(sizes);
+  let skyCount = 0;
+  let seaCount = 0;
+  let sandCount = 0;
+
+  for (let index = 0; index < labels.length; index += 1) {
+    const source = originalLabels[index];
+    if (!source || protectedLabels.has(source)) continue;
+    const x = index % canvas.width;
+    const y = Math.floor(index / canvas.width);
+    if (y >= tralaleroSandLine(x)) {
+      labels[index] = sandId;
+      sandCount += 1;
+    } else if (y >= tralaleroSeaLine(x)) {
+      labels[index] = seaId;
+      seaCount += 1;
+    } else {
+      labels[index] = skyId;
+      skyCount += 1;
+    }
+  }
+
+  sizes[skyId] = skyCount;
+  sizes[seaId] = seaCount;
+  sizes[sandId] = sandCount;
+}
+
+function isTrenostruzzoSmoke(x, y) {
+  if (x < 55 || x > 515 || y < 14 || y > 140) return false;
+  const chimneyLift = Math.max(0, (x - 300) / 215) * 34;
+  const lowerEdge = 96 + chimneyLift + Math.sin(x / 44) * 8;
+  const upperEdge = 24 + Math.sin(x / 58) * 7;
+  return y >= upperEdge && y <= lowerEdge;
+}
+
+function applyTrenostruzzoOriginalRegions(labels, sizes) {
+  const originalLabels = labels.slice();
+  const backgroundLabel = sampleLabel(originalLabels, 28, 30);
+  const protectedLabels = new Set([
+    sampleLabel(originalLabels, 160, 250),
+    sampleLabel(originalLabels, 230, 355),
+    sampleLabel(originalLabels, 145, 505),
+    sampleLabel(originalLabels, 285, 505),
+    sampleLabel(originalLabels, 465, 360),
+    sampleLabel(originalLabels, 545, 245),
+    sampleLabel(originalLabels, 455, 680),
+    sampleLabel(originalLabels, 555, 680),
+  ].filter((label) => label && label !== backgroundLabel));
+
+  const skyId = nextRegionId(sizes);
+  const smokeId = nextRegionId(sizes);
+  let skyCount = 0;
+  let smokeCount = 0;
+
+  for (let index = 0; index < labels.length; index += 1) {
+    const source = originalLabels[index];
+    if (!source || protectedLabels.has(source)) continue;
+    const x = index % canvas.width;
+    const y = Math.floor(index / canvas.width);
+    if (isTrenostruzzoSmoke(x, y)) {
+      labels[index] = smokeId;
+      smokeCount += 1;
+    } else if (y < 380) {
+      labels[index] = skyId;
+      skyCount += 1;
+    }
+  }
+
+  sizes[skyId] = skyCount;
+  sizes[smokeId] = smokeCount;
+}
+
+function applyPageRegionOverrides(pageId, labels, sizes) {
+  if (pageId === "tralalero") {
+    applyTralaleroRegions(labels, sizes);
+  } else if (pageId === "trenostruzzo-original") {
+    applyTrenostruzzoOriginalRegions(labels, sizes);
+  }
+}
+
 function updateUndoButton() {
   undoButton.disabled = undoStack.length === 0;
 }
@@ -462,6 +601,7 @@ function preparePageRegions() {
   workingImageData = cloneImageData(sourceImageData);
   const regions = buildRegions(lineMask);
   attachVirtualBarriersToRegions(regions.labels, virtualBarrierMask);
+  applyPageRegionOverrides(page.id, regions.labels, regions.sizes);
   regionMap = regions.labels;
   regionSizes = regions.sizes;
   regionColors = new Map();

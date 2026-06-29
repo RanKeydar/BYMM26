@@ -88,10 +88,19 @@ assert.equal(await undoButton.isDisabled(), true);
 
 const beachPoint = { x: 420, y: 760 };
 const sharkPoint = { x: 325, y: 430 };
+const skyPoint = { x: 28, y: 70 };
+const secondBeachPoint = { x: 635, y: 815 };
 const beachPixel = await canvasPixel(canvas, beachPoint.x, beachPoint.y);
+const secondBeachPixel = await canvasPixel(canvas, secondBeachPoint.x, secondBeachPoint.y);
 const sharkPixel = await canvasPixel(canvas, sharkPoint.x, sharkPoint.y);
+const skyPixel = await canvasPixel(canvas, skyPoint.x, skyPoint.y);
 await swatches.nth(1).click();
 await clickCanvasPixel(canvas, 44, 540);
+assert.deepEqual(
+  await canvasPixel(canvas, skyPoint.x, skyPoint.y),
+  skyPixel,
+  "the Tralalero sea region should not leak into the sky area",
+);
 assert.deepEqual(
   await canvasPixel(canvas, beachPoint.x, beachPoint.y),
   beachPixel,
@@ -109,6 +118,11 @@ assert.notDeepEqual(
   await canvasPixel(canvas, beachPoint.x, beachPoint.y),
   beachPixel,
   "the Tralalero beach area should remain directly colorable",
+);
+assert.notDeepEqual(
+  await canvasPixel(canvas, secondBeachPoint.x, secondBeachPoint.y),
+  secondBeachPixel,
+  "the Tralalero beach area should fill as one sand element",
 );
 await page.keyboard.press("Control+z");
 
@@ -137,6 +151,20 @@ for (let index = 0; index < await characterButtons.count(); index += 1) {
   loadedTitles.push(await page.locator("#page-title").innerText());
 }
 assert.equal(new Set(loadedTitles).size, 9);
+
+await characterButtons.nth(8).click();
+await page.locator("#loading-state").waitFor({ state: "hidden" });
+const trenoSkyPoint = { x: 25, y: 65 };
+const trenoSmokePoint = { x: 300, y: 66 };
+const trenoSmokePixel = await canvasPixel(canvas, trenoSmokePoint.x, trenoSmokePoint.y);
+await swatches.nth(0).click();
+await clickCanvasPixel(canvas, trenoSkyPoint.x, trenoSkyPoint.y);
+assert.deepEqual(
+  await canvasPixel(canvas, trenoSmokePoint.x, trenoSmokePoint.y),
+  trenoSmokePixel,
+  "the original Trenostruzzo smoke should not be colored with the sky",
+);
+await page.keyboard.press("Control+z");
 
 await swatches.nth(0).click();
 await clickCanvasPixel(canvas, 20, 20);
