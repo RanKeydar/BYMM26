@@ -155,8 +155,10 @@ assert.equal(new Set(loadedTitles).size, 9);
 await characterButtons.nth(8).click();
 await page.locator("#loading-state").waitFor({ state: "hidden" });
 const trenoSkyPoint = { x: 25, y: 65 };
+const trenoRightSkyPoint = { x: 600, y: 65 };
 const trenoSmokePoint = { x: 260, y: 70 };
 const trenoSkyPixel = await canvasPixel(canvas, trenoSkyPoint.x, trenoSkyPoint.y);
+const trenoRightSkyPixel = await canvasPixel(canvas, trenoRightSkyPoint.x, trenoRightSkyPoint.y);
 const trenoSmokePixel = await canvasPixel(canvas, trenoSmokePoint.x, trenoSmokePoint.y);
 await swatches.nth(0).click();
 await clickCanvasPixel(canvas, trenoSkyPoint.x, trenoSkyPoint.y);
@@ -177,6 +179,11 @@ assert.deepEqual(
   await canvasPixel(canvas, trenoSkyPoint.x, trenoSkyPoint.y),
   trenoSkyPixel,
   "the original Trenostruzzo sky should not be colored with the smoke",
+);
+assert.deepEqual(
+  await canvasPixel(canvas, trenoRightSkyPoint.x, trenoRightSkyPoint.y),
+  trenoRightSkyPixel,
+  "the original Trenostruzzo right sky should not be colored with the smoke",
 );
 await page.keyboard.press("Control+z");
 

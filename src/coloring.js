@@ -383,16 +383,19 @@ function drawInkPath(imageData, points, thickness = 3) {
 
 function drawPageBoundaryGuides(imageData, pageId) {
   if (pageId === "tralalero") {
-    drawInkPath(imageData, [[0, 514], [55, 512], [112, 513], [150, 512]], 3);
-    drawInkPath(imageData, [[592, 514], [650, 512], [720, 511]], 3);
-    drawInkPath(imageData, [[0, 584], [78, 585], [150, 582]], 3);
-    drawInkPath(imageData, [[555, 588], [638, 584], [720, 585]], 3);
+    drawInkPath(imageData, [[0, 584], [78, 585], [132, 583]], 3);
+    drawInkPath(imageData, [[575, 588], [638, 584], [720, 585]], 3);
   }
 }
 
 function createVirtualBarriers(pageId) {
   const mask = new Uint8Array(canvas.width * canvas.height);
-  if (pageId === "trenostruzzo-original") {
+  if (pageId === "tralalero") {
+    drawMaskPath(mask, [[0, 514], [150, 512]], 4);
+    drawMaskPath(mask, [[610, 514], [720, 511]], 4);
+    drawMaskPath(mask, [[0, 584], [132, 583]], 4);
+    drawMaskPath(mask, [[575, 588], [720, 585]], 4);
+  } else if (pageId === "trenostruzzo-original") {
     drawMaskPath(mask, [
       [45, 38],
       [62, 25],
@@ -527,13 +530,30 @@ function mergeRegionIds(labels, sizes, regionIds) {
   });
 }
 
+function collectRegionIds(labels, x1, y1, x2, y2, step = 12, excludedIds = new Set()) {
+  const ids = [];
+  for (let y = y1; y <= y2; y += step) {
+    for (let x = x1; x <= x2; x += step) {
+      const id = regionAt(labels, x, y);
+      if (id && !excludedIds.has(id)) ids.push(id);
+    }
+  }
+  return ids;
+}
+
 function applyLineArtRegionMerges(pageId, labels, sizes) {
   if (pageId !== "trenostruzzo-original") return;
+  const skyIds = new Set([
+    regionAt(labels, 25, 65),
+    regionAt(labels, 420, 100),
+    regionAt(labels, 530, 145),
+    regionAt(labels, 600, 65),
+  ].filter(Boolean));
   mergeRegionIds(labels, sizes, [
+    ...collectRegionIds(labels, 48, 28, 430, 112, 10, skyIds),
     regionAt(labels, 80, 80),
     regionAt(labels, 130, 70),
     regionAt(labels, 260, 70),
-    regionAt(labels, 500, 105),
   ]);
 }
 
