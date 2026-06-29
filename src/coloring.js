@@ -342,10 +342,29 @@ function drawMaskLine(mask, x1, y1, x2, y2, thickness = 3) {
   }
 }
 
+function drawMaskPath(mask, points, thickness = 3) {
+  for (let index = 1; index < points.length; index += 1) {
+    const [x1, y1] = points[index - 1];
+    const [x2, y2] = points[index];
+    drawMaskLine(mask, x1, y1, x2, y2, thickness);
+  }
+}
+
 function createVirtualBarriers(pageId) {
   const mask = new Uint8Array(canvas.width * canvas.height);
   if (pageId === "tralalero") {
-    drawMaskLine(mask, 0, 550, 720, 550, 3);
+    drawMaskPath(mask, [
+      [0, 575],
+      [70, 585],
+      [145, 574],
+      [220, 590],
+      [300, 578],
+      [380, 592],
+      [470, 580],
+      [565, 592],
+      [645, 578],
+      [720, 586],
+    ], 3);
   }
   return mask;
 }
@@ -433,7 +452,7 @@ function updateUndoButton() {
 function preparePageRegions() {
   const page = PAGES[currentPageIndex];
   const sourceImageData = context.getImageData(0, 0, canvas.width, canvas.height);
-  removeNumberLabels(sourceImageData);
+  if (page.id !== "tralalero") removeNumberLabels(sourceImageData);
   const visibleLineMask = strengthenLineMask(createLineMask(sourceImageData));
   virtualBarrierMask = createVirtualBarriers(page.id);
   lineMask = mergeMasks(visibleLineMask, virtualBarrierMask);
