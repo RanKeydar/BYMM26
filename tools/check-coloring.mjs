@@ -12,6 +12,22 @@ async function canvasPixel(canvas, x, y) {
   ], { x, y });
 }
 
+async function darkPixelCount(canvas, box) {
+  return canvas.evaluate((element, bounds) => {
+    const context = element.getContext("2d");
+    const { data, width } = context.getImageData(0, 0, element.width, element.height);
+    let count = 0;
+    for (let y = bounds.y1; y <= bounds.y2; y += 1) {
+      for (let x = bounds.x1; x <= bounds.x2; x += 1) {
+        const offset = (y * width + x) * 4;
+        const luminance = data[offset] * 0.299 + data[offset + 1] * 0.587 + data[offset + 2] * 0.114;
+        if (luminance < 95) count += 1;
+      }
+    }
+    return count;
+  }, box);
+}
+
 async function clickCanvasPixel(canvas, x, y) {
   const box = await canvas.boundingBox();
   assert.ok(box, "canvas must have a bounding box");
@@ -63,6 +79,17 @@ assert.equal(await page.locator("#zoom-value").innerText(), "125%");
 assert.equal(await page.locator("#canvas-surface").evaluate((element) => element.style.width), "125%");
 await page.locator("#zoom-reset-button").click();
 assert.equal(await page.locator("#zoom-value").innerText(), "100%");
+
+const tralaleroNumberBoxes = [
+  { x1: 39, y1: 34, x2: 43, y2: 46 },
+  { x1: 332, y1: 52, x2: 335, y2: 64 },
+  { x1: 229, y1: 414, x2: 236, y2: 427 },
+  { x1: 420, y1: 433, x2: 427, y2: 446 },
+  { x1: 31, y1: 506, x2: 34, y2: 518 },
+];
+for (const box of tralaleroNumberBoxes) {
+  assert.equal(await darkPixelCount(canvas, box), 0, "Tralalero number labels should be removed");
+}
 
 const basePixel = await canvasPixel(canvas, 20, 20);
 await swatches.nth(1).click();

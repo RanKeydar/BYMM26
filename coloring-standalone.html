@@ -1208,7 +1208,7 @@ function updateUndoButton() {
 function preparePageRegions() {
   const page = PAGES[currentPageIndex];
   const sourceImageData = context.getImageData(0, 0, canvas.width, canvas.height);
-  if (page.id !== "tralalero") removeNumberLabels(sourceImageData);
+  removeNumberLabels(sourceImageData);
   drawPageBoundaryGuides(sourceImageData, page.id);
   const visibleLineMask = strengthenLineMask(createLineMask(sourceImageData));
   virtualBarrierMask = createVirtualBarriers(page.id);
