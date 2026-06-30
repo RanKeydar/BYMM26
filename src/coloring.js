@@ -142,6 +142,11 @@ function showToast(message) {
   toastTimer = window.setTimeout(() => toast.classList.remove("visible"), 1700);
 }
 
+function canvasSafeImageSource(source) {
+  if (source.startsWith("data:") || source.startsWith("blob:")) return source;
+  return `${source}${source.includes("?") ? "&" : "?"}canvas-cors=1`;
+}
+
 function renderCharacters() {
   characterStrip.innerHTML = "";
   PAGES.forEach((page, index) => {
@@ -629,7 +634,7 @@ function loadCurrentPage() {
     statusMessage.textContent = "לא הצלחנו לטעון את דף הצביעה";
     showToast("טעינת הדף נכשלה");
   };
-  image.src = page.lineArt;
+  image.src = canvasSafeImageSource(page.lineArt);
 }
 
 function selectPage(index) {
