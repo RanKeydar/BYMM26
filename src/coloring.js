@@ -397,7 +397,7 @@ function drawPageBoundaryGuides(imageData, pageId) {
 function createVirtualBarriers(pageId) {
   const mask = new Uint8Array(canvas.width * canvas.height);
   if (pageId === "tralalero") {
-    drawMaskPath(mask, [[0, 514], [150, 512]], 4);
+    drawMaskPath(mask, [[0, 498], [34, 498], [64, 503], [96, 503], [128, 509], [150, 512]], 4);
     drawMaskPath(mask, [[610, 514], [720, 511]], 4);
     drawMaskPath(mask, [[0, 584], [132, 583]], 4);
     drawMaskPath(mask, [[575, 588], [720, 585]], 4);

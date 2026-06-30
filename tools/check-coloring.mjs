@@ -89,11 +89,29 @@ assert.equal(await undoButton.isDisabled(), true);
 const beachPoint = { x: 420, y: 760 };
 const sharkPoint = { x: 325, y: 430 };
 const skyPoint = { x: 28, y: 70 };
+const leftWaterlinePoint = { x: 60, y: 505 };
 const secondBeachPoint = { x: 640, y: 900 };
 const beachPixel = await canvasPixel(canvas, beachPoint.x, beachPoint.y);
 const secondBeachPixel = await canvasPixel(canvas, secondBeachPoint.x, secondBeachPoint.y);
 const sharkPixel = await canvasPixel(canvas, sharkPoint.x, sharkPoint.y);
 const skyPixel = await canvasPixel(canvas, skyPoint.x, skyPoint.y);
+const leftWaterlinePixel = await canvasPixel(canvas, leftWaterlinePoint.x, leftWaterlinePoint.y);
+await swatches.nth(0).click();
+await clickCanvasPixel(canvas, skyPoint.x, skyPoint.y);
+assert.deepEqual(
+  await canvasPixel(canvas, leftWaterlinePoint.x, leftWaterlinePoint.y),
+  leftWaterlinePixel,
+  "the Tralalero sky should not spill into the left waterline near the shark nose",
+);
+await swatches.nth(1).click();
+await clickCanvasPixel(canvas, 44, 540);
+assert.notDeepEqual(
+  await canvasPixel(canvas, leftWaterlinePoint.x, leftWaterlinePoint.y),
+  leftWaterlinePixel,
+  "the Tralalero left waterline should fill with the sea region",
+);
+await page.keyboard.press("Control+z");
+await page.keyboard.press("Control+z");
 await swatches.nth(1).click();
 await clickCanvasPixel(canvas, 44, 540);
 assert.deepEqual(
