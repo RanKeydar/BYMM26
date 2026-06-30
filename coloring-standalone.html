@@ -1227,6 +1227,9 @@ function loadCurrentPage() {
   pageTitle.textContent = `${page.hebrewName} · ${page.name}`;
   const requestId = ++loadRequestId;
   const image = new Image();
+  if (!page.lineArt.startsWith("data:")) {
+    image.crossOrigin = "anonymous";
+  }
   loadingState.hidden = false;
   loadingState.textContent = "טוען דף צביעה…";
   baseImage = image;
