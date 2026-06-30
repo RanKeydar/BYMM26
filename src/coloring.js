@@ -128,6 +128,7 @@ let regionColors = new Map();
 let undoStack = [];
 let zoomLevel = 1;
 let toastTimer = null;
+let loadRequestId = 0;
 
 const MIN_ZOOM = 0.75;
 const MAX_ZOOM = 3;
@@ -586,26 +587,46 @@ function preparePageRegions() {
 function loadCurrentPage() {
   const page = PAGES[currentPageIndex];
   pageTitle.textContent = `${page.hebrewName} · ${page.name}`;
+  const requestId = ++loadRequestId;
+  const image = new Image();
   loadingState.hidden = false;
   loadingState.textContent = "טוען דף צביעה…";
-  baseImage = new Image();
-  baseImage.onload = () => {
-    context.save();
-    context.fillStyle = "#ffffff";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(baseImage, 0, 0, canvas.width, canvas.height);
-    context.restore();
-    preparePageRegions();
-    setZoom(1, false);
-    canvasFrame.scrollLeft = 0;
-    canvasFrame.scrollTop = 0;
+  baseImage = image;
+  regionMap = null;
+  image.onload = () => {
+    if (requestId !== loadRequestId) return;
+    try {
+      context.save();
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      context.restore();
+      preparePageRegions();
+      setZoom(1, false);
+      canvasFrame.scrollLeft = 0;
+      canvasFrame.scrollTop = 0;
+      statusMessage.textContent = "בחר צבע וגע בתוך שטח";
+    } catch (error) {
+      console.error("Coloring page preparation failed", error);
+      baseImage = null;
+      regionMap = null;
+      statusMessage.textContent = "היתה בעיה בטעינת הדף. נסו לבחור דמות מחדש";
+      showToast("טעינת הדף נכשלה");
+    } finally {
+      if (requestId === loadRequestId) {
+        loadingState.hidden = true;
+      }
+    }
+  };
+  image.onerror = () => {
+    if (requestId !== loadRequestId) return;
+    baseImage = null;
+    regionMap = null;
     loadingState.hidden = true;
-    statusMessage.textContent = "בחר צבע וגע בתוך שטח";
+    statusMessage.textContent = "לא הצלחנו לטעון את דף הצביעה";
+    showToast("טעינת הדף נכשלה");
   };
-  baseImage.onerror = () => {
-    loadingState.textContent = "לא הצלחנו לטעון את דף הצביעה";
-  };
-  baseImage.src = page.lineArt;
+  image.src = page.lineArt;
 }
 
 function selectPage(index) {
