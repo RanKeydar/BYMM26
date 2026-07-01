@@ -1,4 +1,4 @@
-import { chromium } from "file:///C:/Users/bentu/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/playwright@1.61.0/node_modules/playwright/index.mjs";
+import { chromium } from "./playwright-runtime.mjs";
 
 const browser = await chromium.launch({
   headless: true,

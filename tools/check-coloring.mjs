@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chromium } from "file:///C:/Users/bentu/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/playwright@1.61.0/node_modules/playwright/index.mjs";
+import { chromium } from "./playwright-runtime.mjs";
 
 const browser = await chromium.launch({
   headless: true,
@@ -68,7 +68,7 @@ const swatches = page.locator(".swatch");
 const characterButtons = page.locator(".character-option");
 const undoButton = page.locator("#undo-button");
 
-assert.equal(await characterButtons.count(), 9);
+assert.equal(await characterButtons.count(), 10);
 assert.equal(await swatches.count(), 24);
 assert.equal(await page.locator("#canvas-toolbar > #undo-button").count(), 1);
 assert.equal(await page.locator("#hint-button").count(), 0);
@@ -195,10 +195,17 @@ for (let index = 0; index < await characterButtons.count(); index += 1) {
   await page.locator("#loading-state").waitFor({ state: "hidden" });
   loadedTitles.push(await page.locator("#page-title").innerText());
 }
-assert.equal(new Set(loadedTitles).size, 9);
+assert.equal(new Set(loadedTitles).size, 10);
+
+await characterButtons.nth(9).click();
+await page.locator("#loading-state").waitFor({ state: "hidden" });
+assert.equal(await canvas.evaluate((element) => element.width), 960);
+assert.equal(await canvas.evaluate((element) => element.height), 720);
 
 await characterButtons.nth(8).click();
 await page.locator("#loading-state").waitFor({ state: "hidden" });
+assert.equal(await canvas.evaluate((element) => element.width), 720);
+assert.equal(await canvas.evaluate((element) => element.height), 960);
 const trenoSkyPoint = { x: 25, y: 65 };
 const trenoRightSkyPoint = { x: 600, y: 65 };
 const trenoSmokePoint = { x: 260, y: 70 };

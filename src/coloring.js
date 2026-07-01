@@ -71,6 +71,16 @@ const PAGES = [
     avatar: "assets/characters/trenostruzzo-original.png",
     palette: ["#9bdcf7", "#1f3f32", "#d7d7d7", "#f1d0a4", "#1f1f1f", "#75a75e"],
   },
+  {
+    id: "toy-crowd",
+    name: "Toy Crowd",
+    hebrewName: "חבורת צעצועים",
+    lineArt: "assets/coloring/toy-crowd.png",
+    avatar: "assets/characters/toy-crowd.png",
+    width: 960,
+    height: 720,
+    palette: ["#ffd447", "#8bdcf7", "#f08ab8", "#95d475", "#f0b36f", "#9b85d5"],
+  },
 ];
 
 const EXTRA_COLORS = [
@@ -134,6 +144,8 @@ const MIN_ZOOM = 0.75;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = 0.25;
 const MAX_UNDO_STEPS = 30;
+const DEFAULT_CANVAS_WIDTH = 720;
+const DEFAULT_CANVAS_HEIGHT = 960;
 
 function showToast(message) {
   toast.textContent = message;
@@ -145,6 +157,14 @@ function showToast(message) {
 function canvasSafeImageSource(source) {
   if (source.startsWith("data:") || source.startsWith("blob:")) return source;
   return `${source}${source.includes("?") ? "&" : "?"}canvas-cors=1`;
+}
+
+function resizeCanvasForPage(page) {
+  const width = page.width || DEFAULT_CANVAS_WIDTH;
+  const height = page.height || DEFAULT_CANVAS_HEIGHT;
+  if (canvas.width === width && canvas.height === height) return;
+  canvas.width = width;
+  canvas.height = height;
 }
 
 function renderCharacters() {
@@ -594,6 +614,7 @@ function preparePageRegions() {
 function loadCurrentPage() {
   const page = PAGES[currentPageIndex];
   pageTitle.textContent = `${page.hebrewName} · ${page.name}`;
+  resizeCanvasForPage(page);
   const requestId = ++loadRequestId;
   const image = new Image();
   if (!page.lineArt.startsWith("data:")) {
