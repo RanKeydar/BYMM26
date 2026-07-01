@@ -199,7 +199,9 @@ function createLineMask(imageData) {
   return mask;
 }
 
-function removeNumberLabels(imageData) {
+function removeNumberLabels(imageData, pageId) {
+  if (pageId !== "tralalero") return;
+
   const width = imageData.width;
   const height = imageData.height;
   const total = width * height;
@@ -570,7 +572,7 @@ function updateUndoButton() {
 function preparePageRegions() {
   const page = PAGES[currentPageIndex];
   const sourceImageData = context.getImageData(0, 0, canvas.width, canvas.height);
-  removeNumberLabels(sourceImageData);
+  removeNumberLabels(sourceImageData, page.id);
   drawPageBoundaryGuides(sourceImageData, page.id);
   const visibleLineMask = strengthenLineMask(createLineMask(sourceImageData));
   virtualBarrierMask = createVirtualBarriers(page.id);

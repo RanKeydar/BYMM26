@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chromium } from "file:///C:/Users/bentu/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/playwright@1.60.0/node_modules/playwright/index.mjs";
+import { chromium } from "file:///C:/Users/bentu/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/playwright@1.61.0/node_modules/playwright/index.mjs";
 
 const browser = await chromium.launch({
   headless: true,

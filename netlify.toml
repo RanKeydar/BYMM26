@@ -1,6 +1,16 @@
 [build]
   publish = "."
 
+[[redirects]]
+  from = "/coloring"
+  to = "/coloring.html"
+  status = 200
+
+[[redirects]]
+  from = "/coloring/"
+  to = "/coloring.html"
+  status = 200
+
 [[headers]]
   for = "/*.html"
   [headers.values]
@@ -18,4 +28,3 @@
   for = "/vendor/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
-

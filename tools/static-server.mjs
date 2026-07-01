@@ -28,9 +28,17 @@ createServer(async (request, response) => {
   }
 
   try {
-    const data = await readFile(filePath);
+    let resolvedPath = filePath;
+    let data;
+    try {
+      data = await readFile(resolvedPath);
+    } catch (error) {
+      if (extname(resolvedPath)) throw error;
+      resolvedPath = `${resolvedPath}.html`;
+      data = await readFile(resolvedPath);
+    }
     response.writeHead(200, {
-      "Content-Type": contentTypes[extname(filePath)] || "application/octet-stream",
+      "Content-Type": contentTypes[extname(resolvedPath)] || "application/octet-stream",
       "Cache-Control": "no-store",
     });
     response.end(data);
